@@ -70,22 +70,64 @@ header .sub{color:var(--dim);font-size:12.5px}
 .wipe .fs:hover{background:rgba(0,0,0,.75);color:#fff}
 .wipe:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
+/* ---- side by side, while a mask is being painted --------------------------------
+   THE WIPE IS THE WRONG INSTRUMENT FOR PAINTING A MASK. It answers "how does the painting
+   differ from the photograph", which is the question you ask when judging a render and not
+   the one you ask while marking up a passage: there the photograph has to be whole and
+   still, and a divider sitting across the middle of it -- which moves whenever a click
+   lands outside a tool's own canvas -- is something to work around. So arming Layers puts
+   the two pictures beside each other instead: the photograph with the mask over it on the
+   left, where every click goes, and the painting on the right.
+
+   NO SECOND COPY OF ANYTHING. The same #src, the same #top, the same mask canvases, laid
+   out differently -- a duplicate <img> would be a second thing to keep in step with the
+   render, and the mask canvases would then have two possible parents. #src drives the box
+   height in normal flow, so halving its width halves the height too and each pane comes
+   out exactly image-shaped; #top stops being clipped and moves to the other half.
+
+   `clip-path:none!important` is load-bearing and is the same trap the full-screen block
+   below documents: the wipe writes `top.style.clipPath` inline on every drag, and inline
+   beats a stylesheet rule -- but not an `!important` one. Without it the painting would
+   keep whatever clip the divider was last left at, in a view that has no divider. */
+.wipe.split{cursor:default}
+.wipe.split #src{width:50%}
+.wipe.split .top{left:50%;width:50%;clip-path:none!important;
+  box-shadow:-1px 0 0 rgba(255,255,255,.55)}
+/* Both mask layers cover the LEFT pane only -- they belong to the photograph, not to the
+   painting. `width` wins over `right` when left, right and width are all set, which is
+   what `inset:0` above leaves them with. The click maths reads the canvas's own
+   getBoundingClientRect, so nothing in the tools has to know this happened. */
+.wipe.split canvas.mask{width:50%}
+.wipe.split .bar{display:none}
+/* Over the pane the clicks go to, not over the middle of a two-picture box. */
+.wipe.split .guide{left:25%}
+/* Full screen, split: each pane is half the viewport and letterboxes on its own, so both
+   layers need the same fit -- the argument the non-split rule makes, one pane at a time. */
+.wipe.split:fullscreen #src{width:50%;height:100%;object-fit:contain}
+.wipe.split:fullscreen .top{left:50%;width:50%}
+
 /* ---- the foveal brush ----------------------------------------------------------
    A canvas laid over the wipe whose ALPHA CHANNEL IS THE MAP: painting a soft red dab
    both shows the mark and records its weight, so there is no second buffer to keep in
    sync with what is on screen and no conversion between the two. Reading it back is the
    alpha byte of getImageData; that is the whole storage design.
    Kept off the pointer unless the brush is armed, so the wipe divider still works. */
+/* `object-fit:contain` UNCONDITIONALLY, not only in full screen. It is a no-op in the
+   window -- the box is sized from the image's own aspect and so is the bitmap -- and what
+   it buys is that the element fits its content ONE way everywhere, which is what lets
+   `maskPoint` invert it with one formula instead of asking the computed style, per pointer
+   event, which fit is in force. See maskPoint for the bug this half of the fix is for. */
 .wipe canvas.mask{position:absolute;inset:0;width:100%;height:100%;z-index:3;opacity:.6;
-  pointer-events:none;touch-action:none}
+  object-fit:contain;pointer-events:none;touch-action:none}
 .wipe canvas.mask.on{pointer-events:auto;cursor:crosshair}
 /* The swirl-centre overlay. Same geometry as the foveal canvas -- it is the same trick,
    an absolutely-positioned layer over the wipe -- but drawn at full opacity and above it:
    these are MARKERS, not a weight field, and a marker at 60% reads as an artefact of the
    painting rather than as a control. Its own z-index so the two can be on together. */
 .wipe canvas.vtx{opacity:1;z-index:4}
-/* Same reason as the two img rules above: against a 100vh box the layers letterbox
-   differently, and the map would sit off the picture it describes. */
+/* Kept for the record rather than for effect: the base rule above now sets this in both
+   modes, and this is the case that forced it. Against a 100vh box the image letterboxes
+   and a canvas that did not would sit off the picture it describes. */
 .wipe:fullscreen canvas.mask{object-fit:contain}
 
 /* Full screen, the same gesture as the site's camera-noise card (projects/grain): the WIPE
@@ -119,6 +161,20 @@ header .sub{color:var(--dim);font-size:12.5px}
 .busy-txt{font:600 10.5px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.09em;
   text-transform:uppercase;color:var(--fg);font-variant-numeric:tabular-nums;white-space:nowrap}
 
+/* ---- guidance where the eye already is -----------------------------------------
+   The instruction for step two of every tool used to land in `#status`, at the far end of
+   a twelve-item toolbar and some 800px from the thing it was asking you to click. "Press
+   + New layer, then click the picture" is only useful while you are looking at it, so
+   it is now ON the picture. Not a tooltip and not a modal: a strip that appears when a
+   tool is armed, says the one next thing, and goes away when the tool does.
+   pointer-events:none is load-bearing -- every tool under it is click-to-paint, and a
+   banner that ate the first click would be worse than no banner at all. */
+.wipe .guide{position:absolute;left:50%;top:9px;transform:translateX(-50%);z-index:5;
+  max-width:58%;background:rgba(35,32,27,.84);color:#fff;padding:6px 13px;border-radius:16px;
+  font:12px/1.35 ui-sans-serif,system-ui,sans-serif;text-align:center;pointer-events:none;
+  box-shadow:0 1px 7px rgba(0,0,0,.32)}
+.wipe .guide b{color:#f0c08a;font-weight:600}
+
 #drop{border:2px dashed var(--line);border-radius:10px;padding:52px 20px;text-align:center;
   color:var(--dim);cursor:pointer;transition:border-color .15s,background .15s;width:100%}
 #drop.over{border-color:var(--accent);background:#fbf3ec}
@@ -132,8 +188,72 @@ button:hover{border-color:var(--accent);color:var(--accent)}
 button.pri{background:var(--accent);border-color:var(--accent);color:#fff}
 button.pri:hover{filter:brightness(1.08);color:#fff}
 button:disabled{opacity:.45;cursor:default}
-label.tog{display:flex;align-items:center;gap:5px;font-size:12.5px;cursor:pointer}
 button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* ---- the toolbar ---------------------------------------------------------------
+   ONE SHAPE PER CONTROL CLASS, AND A CAPTION PER GROUP.
+
+   The bar was twelve controls in one flex row, grouped only by a 1px hairline and by the
+   author's knowledge of what belonged with what. A `<label><input type=checkbox></label>`
+   and a `<button>` came out the same size, the same weight and the same colour, so a MODE
+   (`auto`, `full res`, `stats`) sat indistinguishable from an ACTION (`Download`,
+   `Re-seed`, `Clear`) -- reported, exactly, as "the checkbox and button are mixed and not
+   sorted". Two rules fix it and neither is decoration:
+
+     - a toggle is a PILL with a dot, an action is a rectangle. The class is legible
+       before the label is read.
+     - the groups carry a visible caption (TOOL / PAINTING / EXPORT), so the grouping is
+       in the page rather than in a comment.
+
+   The inputs keep their ids, their `type=checkbox` and their `.checked` semantics: the
+   page's own handlers, `session.js` and index_node.mjs all drive them that way, and a
+   redesign that swapped them for buttons would be a visual fix bought with a broken
+   harness. Only the skin changes. */
+.toolbar{display:flex;gap:20px;flex-wrap:wrap;align-items:center;margin:12px 0 10px}
+.tgrp{display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+.tcap{font:600 9.5px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--dim);white-space:nowrap}
+/* The second row is for the session, not for the picture: rarely reached for, never
+   urgent, and two of them destructive. Smaller and dimmer says so without a caption. */
+.toolbar.minor{margin:0 0 12px;gap:9px;padding-top:9px;border-top:1px solid var(--line)}
+.toolbar.minor button{font-size:11.5px;padding:3px 9px;color:var(--dim)}
+.toolbar.minor button:hover{color:var(--accent)}
+.toolbar.minor label.tog>span{font-size:11.5px;padding:3px 9px 3px 7px}
+
+/* The three picture tools are MUTUALLY EXCLUSIVE in the code -- rgnMode() calls
+   fovMode(false) and vtxMode(false), because two click-to-paint canvases stacked on one
+   surface means the top one silently eats the click and the other looks broken. Nothing
+   said so. A segmented control is the one widget whose shape already means "these are the
+   states of one thing, and exactly one is on", so arming Layers visibly releasing Focus
+   map is now the widget doing its job rather than a surprise. */
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;background:#fff}
+.seg button{border:0;border-left:1px solid var(--line);border-radius:0;background:none;
+  padding:5px 12px}
+.seg button:first-child{border-left:0;border-radius:6px 0 0 6px}
+.seg button:last-child{border-radius:0 6px 6px 0}
+.seg button.on,.seg button.on:hover{background:var(--accent);color:#fff}
+/* The swirl tool is armed from the Flow card, never from here -- it is a property of the
+   flow field and belongs where the field is chosen. This chip only ever APPEARS while that
+   tool is on, and only ever turns it off, so the bar answers "what is armed" for all four
+   tools without becoming a second way to arm one. */
+.seg button.echo{font-style:italic}
+
+label.tog{position:relative;display:inline-flex;align-items:center;font-size:12.5px;
+  cursor:pointer}
+label.tog input{position:absolute;inset:0;width:100%;height:100%;opacity:0;margin:0;
+  cursor:pointer}
+label.tog>span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px 5px 9px;
+  border:1px solid var(--line);border-radius:15px;background:#fff;line-height:1.2;
+  white-space:nowrap}
+label.tog>span::before{content:'';width:9px;height:9px;border-radius:50%;flex:none;
+  border:1.5px solid var(--line);background:#fff}
+label.tog:hover>span{border-color:var(--accent)}
+label.tog input:checked+span{border-color:var(--accent);color:var(--accent);background:#fbf3ec}
+label.tog input:checked+span::before{background:var(--accent);border-color:var(--accent)}
+label.tog input:disabled+span{opacity:.5;cursor:default}
+label.tog input:disabled{cursor:default}
+label.tog input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+label.tog .dim{color:var(--dim)}
 /* A tool whose target cannot use it. Not `disabled`: the button still opens the bar, which
    is where the reason and the one-click fix are -- "a button that cannot work must look
    like it cannot work", and a dead button with no explanation is the same defect twice. */
@@ -143,30 +263,48 @@ button.off{opacity:.5;border-style:dashed}
    another control. */
 .cardtool{width:100%;margin-top:2px}
 button.on:hover{filter:brightness(1.08);color:#fff}
-#fovBar{gap:9px;padding:9px 12px;background:var(--surface);border:1px solid var(--line);
-  border-radius:8px;margin-top:-4px}
-#fovBar input[type=range]{width:96px;accent-color:var(--accent);margin:0}
-#fovBar .fovlabel{font-family:var(--mono);font-size:11px;color:var(--dim)}
-#fovBar .fovnum{font-family:var(--mono);font-size:11px;color:var(--accent);
-  font-variant-numeric:tabular-nums;min-width:26px}
-#fovBar .fovhint{font-size:11.5px;color:var(--dim);flex-basis:100%}
-#vtxBar{gap:9px;padding:9px 12px;background:var(--surface);border:1px solid var(--line);
-        border-radius:8px}
-#vtxBar .fovlabel{font-family:var(--mono);font-size:11px;color:var(--dim)}
-#vtxBar .fovnum{font-family:var(--mono);font-size:11px;color:var(--accent);min-width:2.2em}
-#vtxBar .fovhint{font-size:11.5px;color:var(--dim);flex-basis:100%}
+/* ---- the tool strips -----------------------------------------------------------
+   THE SAME GRAMMAR FOR ALL THREE, because a visitor learns an interaction once or three
+   times, and three was the answer here: the focus map was a brush with size/weight/erase,
+   the layers a flood fill with tolerance/contiguous, the swirls a click-to-place with a
+   count -- laid out in three different orders, with the erase of one tool a checkbox and
+   the erase of another an undocumented consequence of which row was selected.
+
+   One order now, left to right, in the sequence a hand actually uses them:
+
+       NAME | what the click does | how it does it | show | clear | ...then the hint
+
+   The name is not decoration: three strips that look alike need to say which one is open,
+   and it is the only word in the strip that never changes. */
+.tstrip{gap:9px;padding:9px 12px;background:var(--surface);border:1px solid var(--line);
+  border-radius:10px;margin:0 0 12px;align-items:center}
+.tstrip .tname{font:600 9.5px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--accent);white-space:nowrap;
+  border-right:1px solid var(--line);padding-right:10px}
+.tstrip input[type=range]{width:96px;accent-color:var(--accent);margin:0}
+.tstrip .fovlabel{font-size:11.5px;color:var(--dim);white-space:nowrap}
+.tstrip .fovnum{font-family:var(--mono);font-size:11px;color:var(--accent);
+  font-variant-numeric:tabular-nums;min-width:2.2em}
+.tstrip .fovhint{font-size:11.5px;color:var(--dim);flex-basis:100%;line-height:1.4}
+/* A hairline inside a strip, for the same reason the toolbar has captions: "what the click
+   does" and "how it does it" are two questions, and the strip should not read as one list
+   of eight things. */
+.tstrip .tsep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+/* One mode's settings, as a single flex item so the group appears and disappears whole.
+   The author `display` here is exactly what the global [hidden]{display:none!important}
+   rule exists to outrank -- see the note at the top of this file, and the check in
+   verify_page.py that fails the build without it. */
+.tstrip .opts{display:flex;align-items:center;gap:9px}
+/* The strip's mode pair is smaller than the toolbar's: it chooses between two ways of
+   making the same mark, not between four tools. */
+.tstrip .seg button{padding:4px 10px;font-size:12px}
 /* The target readout, in the layers bar's own shape and tinted with the target's colour --
    "which field am I placing into" answerable without reading anything. */
 #vtxFor{font-size:11.5px;color:var(--dim);border-left:2px solid var(--line);padding-left:7px}
 /* A canvas the tool has switched off. Not `hidden`: the markers stay visible, because what
    the picture will do is worth seeing even while you cannot edit it. */
 #vtxCanvas.inert{cursor:not-allowed}
-#rgnBar{gap:9px;padding:9px 12px;background:var(--surface);border:1px solid var(--line);
-  border-radius:10px;margin-bottom:12px;align-items:center}
-#rgnBar input[type=range]{width:96px;accent-color:var(--accent);margin:0}
-#rgnBar .fovlabel{font-family:var(--mono);font-size:11px;color:var(--dim)}
-#rgnBar .fovnum{font-family:var(--mono);font-size:11px;color:var(--accent);min-width:2.2em}
-#rgnBar .fovhint{font-size:11.5px;color:var(--dim);flex-basis:100%}
+
 /* The layers panel. A list, a selection and an eye per row -- the shape every layer-based
    tool has, because the mental model is worth more here than the pixels it costs: the
    Palette rows write to whatever is selected, and a list is the only honest way to show
@@ -211,10 +349,9 @@ button.on:hover{filter:brightness(1.08);color:#fff}
 .row.mixed .val{color:var(--dim)}
 .row.mixed input[type=range]{opacity:.55}
 .spacer{flex:1}
-/* A hairline between toolbar groups. The bar is one row of a dozen controls and the only
-   thing that made it readable was habit; a rule every few items says "these belong
-   together" without a label for each group. */
-.sep{width:1px;align-self:stretch;background:var(--line);margin:0 3px}
+/* The toolbar's hairline separators are gone with the row they divided: a 1px rule was
+   the most a flat list of a dozen controls could say about grouping, and it was not
+   enough. The groups carry captions now, and the strips carry `.tsep`. */
 #status{font-size:12px;color:var(--dim)}
 #status.busy{color:var(--accent)}
 
@@ -235,6 +372,9 @@ button.on:hover{filter:brightness(1.08);color:#fff}
 .card h2{font-size:11px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.12em;
   color:var(--dim);font-weight:600;display:flex;justify-content:space-between;align-items:baseline}
 .card h2 em{font-style:normal;font-family:var(--mono);font-size:10px;opacity:.75;text-transform:none;letter-spacing:0}
+/* Seven group names in a column is a filing system, not an explanation. One line each,
+   from oilpaint/schema.py's GROUP_NOTES, so both front ends say the same thing. */
+.card .csub{font-size:11px;color:var(--dim);line-height:1.35;margin:-6px 0 11px}
 /* The tubes on the palette, drawn under its dropdown. A name like "zorn" is only a name
    until you can see that there is no blue in it. */
 .swatch{display:flex;gap:3px;margin:6px 0 1px;min-height:13px;align-items:center}
@@ -261,8 +401,28 @@ button.on:hover{filter:brightness(1.08);color:#fff}
 .row{margin-bottom:10px}
 .row:last-child{margin-bottom:0}
 .row label{display:flex;justify-content:space-between;gap:8px;align-items:baseline;margin-bottom:3px}
-.row .name{font-family:var(--mono);font-size:11.5px}
-.row .val{font-family:var(--mono);font-size:11.5px;color:var(--accent);font-variant-numeric:tabular-nums}
+/* THE LABEL LEADS, THE FIELD NAME FOLLOWS -- and the field name is never dropped.
+   Every row used to be printed as its Python identifier in monospace: `target_n`,
+   `tau_floor`, `aniso_max`, `jitter_theta_deg`. That is a variable name, not a label, and
+   the prose that would have rescued it (`.hint`) is `display:none` until the help toggle is
+   on -- so the default first impression of the tool was forty identifiers and no words.
+   The names come from oilpaint/schema.py's LABELS, beside the fields they name, because a
+   control surface that exists twice is one that disagrees with itself.
+   The identifier STAYS, small and dim underneath, and that is the honest half: it is what
+   `scripts/paint.py` takes, what `Copy setup` writes and what a saved session stores, so
+   hiding it would cost the page-to-command-line path to buy a tidier row. */
+.row .name{display:flex;flex-direction:column;gap:1px;font-size:12.5px;line-height:1.25}
+.row .name code{font-family:var(--mono);font-size:9.5px;color:var(--dim);letter-spacing:.02em}
+.row .val{font-family:var(--mono);font-size:11.5px;color:var(--accent);font-variant-numeric:tabular-nums;
+  white-space:nowrap}
+/* The unit, where a number means nothing without one. Dimmer than the number: it is the
+   same word on every render and the number is not. */
+.row .val u{text-decoration:none;color:var(--dim);font-size:10px;margin-left:1px}
+/* The first sentence of the help, always visible on the three front cards. The full help
+   is still behind the toggle; this is the line that stops a slider being anonymous, and it
+   steps aside when the long version arrives rather than saying the same thing twice. */
+.row .lead{font-size:11px;color:var(--dim);line-height:1.35;margin-top:3px}
+.row.show-hint .lead{display:none}
 .row input[type=range]{width:100%;accent-color:var(--accent);margin:0;display:block}
 .row select{width:100%;font:inherit;font-size:12.5px;padding:3px 5px;
   border:1px solid var(--line);border-radius:5px;background:#fff;color:var(--fg)}
@@ -307,6 +467,7 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26p
       <span class="tag tag-r">painting</span>
       <button type="button" class="clear" id="clear" title="Load a different image">change image</button>
       <button type="button" class="fs" id="fs" title="Full screen" aria-label="Full screen">&#10530;</button>
+      <div class="guide" id="guide" hidden></div>
       <div class="busy-pill" id="busyOv" hidden>
         <span class="ring"></span>
         <span class="busy-txt" id="busyTag">rendering</span>
@@ -314,47 +475,77 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26p
     </div>
   </div>
 
-  <!-- GROUPED BY WHAT THEY ARE FOR, and within that by how often a hand reaches for one.
-       The tools that mark the picture come first because they are what the page is about;
-       the result next; the painting's own dice-roll and reset after that; and the rare or
-       destructive things go past the spacer, at the far edge, next to the status line.
+  <!-- THREE ZONES WITH VISIBLE CAPTIONS, and one shape per class of control.
 
-       `Render` is HIDDEN while `auto` is on, which is the default -- with every change
-       re-rendering there is nothing for it to do, and a button with nothing to do is worse
-       than no button. Turning `auto` off brings it back, because a full-res render on a
-       large photo is tens of seconds and re-running it on every slider nudge is exactly
-       what that checkbox exists to escape. `Download` carries the primary emphasis instead:
-       it is what the page is for. -->
-  <div class="bar-row">
-    <button id="fovBtn" title="Paint a foveal map: mark where a viewer's eye should go, and the stroke budget follows it. The content metric answers a different question -- a gravel path outscores a face -- so this puts the eye back in as an input.">Foveal map</button>
-    <button id="rgnBtn" title="Divide the picture into layers and paint each one separately. + Layer, click the picture to fill it, then move the Palette or Flow rows -- they write to the selected layer, not to the whole picture. Colour never moves a stroke; Flow re-combs that layer's own strokes and leaves the rest of the picture exactly as it was.">Layers</button>
-    <span class="sep"></span>
-    <label class="tog" title="Paint at the source's own resolution, which is what Download then writes. Cost scales with area — tens of seconds on a large photo. Sources longer than 4096px are capped there for memory, and the stats line says so when that happens."><input type="checkbox" id="full"> full res <span style="color:var(--dim)">(slow)</span></label>
-    <button class="pri" id="dl" disabled>Download</button>
-    <span class="sep"></span>
-    <button id="reseed" title="Roll a new random seed: the same painting, arranged differently. The seed itself is a slider in Advanced → Geometry.">Re-seed</button>
-    <button id="reset">Defaults</button>
-    <label class="tog" title="Re-render on every change. Off is for a full-res picture, where a render is tens of seconds and you want to say when."><input type="checkbox" id="auto" checked> auto</label>
-    <button id="render" hidden>Render</button>
-    <span class="spacer"></span>
-    <label class="tog"><input type="checkbox" id="hints"> help</label>
-    <label class="tog" title="The numbers behind the last render: stroke count, coverage, psnr, tau. Off by default -- they are for judging a change, not for looking at a picture. WARNINGS show whether this is on or not."><input type="checkbox" id="showStats"> stats</label>
-    <button id="setupBtn" title="Copy this painting's parameters and placed swirl centres as JSON — the record of what is on screen, for reproducing it with scripts/paint.py.">Copy setup</button>
+       The old bar was one flex row of twelve controls separated by a 1px hairline, and the
+       grouping lived in a comment. Two things followed from that, both reported:
+
+         - a toggle and a button looked identical, so `full res` sat in the same visual
+           weight as `Download` and `stats` in the same weight as `Clear`;
+         - the three picture tools are mutually exclusive in the code and nothing said so,
+           so arming one silently released another.
+
+       Now: TOOL is a segmented control (exactly one state, which is the truth), PAINTING
+       and EXPORT are captioned groups, toggles are pills with a dot and actions are
+       rectangles. Everything about the session -- help, stats, Copy setup, Clear and the
+       status line -- drops to a second, quieter row, because none of it is about the
+       picture and two of them destroy work.
+
+       `Render` is still HIDDEN while `auto` is on, which is the default: with every change
+       re-rendering there is nothing for it to do. Turning `auto` off brings it back,
+       because then it is the only way to see a change. `Download` keeps the primary
+       emphasis; it is what the page is for. -->
+  <div class="toolbar">
+    <div class="tgrp" role="group" aria-label="Picture tools">
+      <span class="tcap">Tool</span>
+      <div class="seg" id="toolSeg">
+        <button id="toolNone" class="on" title="Put the tools away and just compare the painting with the photograph. Drag the divider across the picture.">Compare</button>
+        <button id="fovBtn" title="Paint where a viewer's eye should go, and the stroke budget follows it. The content metric answers a different question -- a gravel path outscores a face -- so this puts the eye back in as an input.">Focus map</button>
+        <button id="rgnBtn" title="Divide the picture into layers and paint each one separately. New layer, click the picture to fill it, then move the Palette or Flow rows -- they write to the selected layer, not to the whole picture.">Layers</button>
+        <button id="toolVtx" class="echo" hidden title="The swirl-centre tool is armed. It is switched on from the Flow card, where the field it belongs to is chosen; this turns it off.">Swirl centres</button>
+      </div>
+    </div>
+    <div class="tgrp" role="group" aria-label="Painting">
+      <span class="tcap">Painting</span>
+      <button id="reseed" title="Roll a new random seed: the same painting, arranged differently. The seed itself is a slider in Advanced &rarr; Geometry.">Re-seed</button>
+      <button id="reset" title="Every control back to its default. The photograph stays.">Defaults</button>
+      <label class="tog" title="Re-render on every change. Off is for a full-res picture, where a render is tens of seconds and you want to say when."><input type="checkbox" id="auto" checked><span>auto render</span></label>
+      <button id="render" hidden>Render</button>
+    </div>
+    <div class="tgrp" role="group" aria-label="Export">
+      <span class="tcap">Export</span>
+      <label class="tog" title="Paint at the source's own resolution, which is what Download then writes. Cost scales with area &mdash; tens of seconds on a large photo. Sources longer than 4096px are capped there for memory, and the stats line says so when that happens."><input type="checkbox" id="full"><span>full res <span class="dim">(slow)</span></span></label>
+      <button class="pri" id="dl" disabled>Download</button>
+    </div>
+  </div>
+  <div class="toolbar minor">
+    <label class="tog" title="Show the full explanation under every control. The front cards carry a one-line version whether this is on or not."><input type="checkbox" id="hints"><span>help text</span></label>
+    <label class="tog" title="The numbers behind the last render: stroke count, coverage, psnr, tau. Off by default -- they are for judging a change, not for looking at a picture. WARNINGS show whether this is on or not."><input type="checkbox" id="showStats"><span>stats</span></label>
+    <button id="setupBtn" title="Copy this painting's parameters and placed swirl centres as JSON &mdash; the record of what is on screen, for reproducing it with scripts/paint.py.">Copy setup</button>
     <button id="clearTop" disabled title="Forget the picture and start from an empty page.">Clear</button>
+    <span class="spacer"></span>
     <span id="status">Waiting for an image.</span>
   </div>
 
-  <div class="bar-row" id="vtxBar" hidden>
+  <div class="bar-row tstrip" id="vtxBar" hidden>
+    <span class="tname">Swirl centres</span>
+    <span class="fovlabel">click the picture to place one, click a marker to remove it</span>
+    <span class="tsep"></span>
     <span class="fovlabel">placed</span>
     <span class="fovnum" id="vtxCount">0</span>
-    <button id="vtxClear">Clear</button>
     <button id="vtxArm" hidden>Use starry</button>
-    <label class="tog"><input type="checkbox" id="vtxShow" checked> show</label>
+    <label class="tog"><input type="checkbox" id="vtxShow" checked><span>show</span></label>
+    <button id="vtxClear">Clear</button>
     <span id="vtxFor"></span>
     <span class="fovhint" id="vtxHint"></span>
   </div>
 
-  <div class="bar-row" id="fovBar" hidden>
+  <div class="bar-row tstrip" id="fovBar" hidden>
+    <span class="tname">Focus map</span>
+    <!-- WHAT THE CLICK DOES comes first in all three strips, because it is the question a
+         hand asks before any of the settings matter. -->
+    <label class="tog" title="Wipe the map back off. Unmarked areas are the ones the content metric decides on its own."><input type="checkbox" id="fovErase"><span>erase</span></label>
+    <span class="tsep"></span>
     <span class="fovlabel">brush</span>
     <input type="range" id="fovSize" min="2" max="30" step="1" value="10"
            title="Brush radius, as a percentage of the image's long side">
@@ -363,26 +554,64 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26p
     <input type="range" id="fovWeight" min="0.05" max="1" step="0.05" value="1"
            title="How important this dab says the area is. Lower is greyer; dabs accumulate.">
     <span class="fovnum" id="fovWeightV">1.00</span>
-    <label class="tog"><input type="checkbox" id="fovErase"> erase</label>
+    <span class="tsep"></span>
+    <!-- THE MAP'S ONE KNOB, IN THE STRIP THAT PAINTS THE MAP. It is the same control as
+         `foveal_strength` on the Allocation card and writes through the same `set()`, so
+         the two can never disagree; what it buys is that painting a map and deciding how
+         much it counts stop being in two different places -- which is what forced the hint
+         under this strip to say "go and find it below". -->
+    <span class="fovlabel">follow it</span>
+    <input type="range" id="fovStrength" min="0" max="1" step="0.01" value="0"
+           title="The same control as foveal_strength on the Allocation card: 0 ignores the map, 1 makes it a hard gate.">
+    <span class="fovnum" id="fovStrengthV">0.00</span>
+    <span class="tsep"></span>
+    <label class="tog"><input type="checkbox" id="fovShow" checked><span>show</span></label>
     <button id="fovClear">Clear</button>
-    <label class="tog"><input type="checkbox" id="fovShow" checked> show</label>
     <span class="fovhint" id="fovHint">Paint where the eye should go &mdash; darker means more
-      strokes. <code>foveal_strength</code> in <b>Allocation</b> below is the one knob: it slides
-      from the content metric alone to the map alone. The budget is <em>redistributed</em>, not
-      increased, so lower <code>target_n</code> until the stats stop saying <b>ceiling</b> or
-      there is nothing for the map to move.</span>
+      strokes. The budget is <em>redistributed</em>, never increased, so lower the
+      <b>stroke budget</b> until the stats stop saying <b>ceiling</b>, or there is nothing
+      for the map to move.</span>
   </div>
-  <div class="bar-row" id="rgnBar" hidden>
-    <button id="rgnAdd">+ Layer</button>
-    <span class="fovlabel">tolerance</span>
-    <input type="range" id="rgnTol" min="2" max="80" step="1" value="18"
-           title="How far a fill spreads from the colour you clicked. Low picks out one
-                  shade, high takes the whole sky.">
-    <span class="fovnum" id="rgnTolV">18</span>
-    <label class="tog" title="Off takes every pixel of that colour in the picture, not just the patch you clicked -- which is what a photograph of leaves or sky usually means."><input type="checkbox" id="rgnContig" checked> contiguous</label>
-    <button id="rgnClear">Clear all</button>
-    <button id="rgnSave">Save mask</button>
-    <label class="tog"><input type="checkbox" id="rgnShow" checked> show</label>
+
+  <div class="bar-row tstrip" id="rgnBar" hidden>
+    <span class="tname">Layers</span>
+    <!-- ERASE IS A CONTROL NOW, not a consequence. It was "select the Base, then click",
+         which made one selection mean two things -- which layer receives paint, AND
+         whether a click paints or wipes -- and said so only in a sentence at the end of
+         the strip. The chip is that state made visible: it arms itself and goes read-only
+         while the Base is selected, because then wiping is the only thing a click can do. -->
+    <!-- WAND OR BRUSH. The fill asks the photograph where the passage ends, which is the
+         right question for a sky and no question at all for a face against a busy
+         background, half a sky, or the shaded side of a wall that is one gradient. The
+         brush is for those. Same segmented shape as the toolbar's TOOL group, because it
+         means the same thing: the states of one control, exactly one of them on. -->
+    <div class="seg">
+      <button id="rgnModeFill" class="on" title="Click a passage and the fill spreads through the colour you clicked.">Fill</button>
+      <button id="rgnModeBrush" title="Drag on the picture to paint the layer by hand, wherever the fill cannot see an edge.">Brush</button>
+    </div>
+    <label class="tog" title="Mark the picture to wipe a passage back to the base."><input type="checkbox" id="rgnErase"><span>erase</span></label>
+    <button id="rgnAdd">+ New layer</button>
+    <span class="tsep"></span>
+    <!-- Each mode's own settings and only its own: the strip is already the longest thing
+         on the page, and a tolerance slider that does nothing is worse than one that is
+         not there. -->
+    <span class="opts" id="rgnFillOpts">
+      <span class="fovlabel">fill spread</span>
+      <input type="range" id="rgnTol" min="2" max="80" step="1" value="18"
+             title="How far a fill spreads from the colour you clicked. Low picks out one shade, high takes the whole sky.">
+      <span class="fovnum" id="rgnTolV">18</span>
+      <label class="tog" title="Off takes every pixel of that colour in the picture, not just the patch you clicked -- which is what a photograph of leaves or sky usually means."><input type="checkbox" id="rgnContig" checked><span>one patch only</span></label>
+    </span>
+    <span class="opts" id="rgnBrushOpts" hidden>
+      <span class="fovlabel">brush</span>
+      <input type="range" id="rgnSize" min="1" max="30" step="1" value="8"
+             title="Brush radius, as a percentage of the image's long side -- the same number the focus map's brush uses.">
+      <span class="fovnum" id="rgnSizeV">8</span>
+    </span>
+    <span class="tsep"></span>
+    <label class="tog"><input type="checkbox" id="rgnShow" checked><span>show</span></label>
+    <button id="rgnSave" title="Write the mask as a PNG. This is the file scripts/paint.py --regions reads.">Save mask</button>
+    <button id="rgnClear" title="Delete every layer and wipe the mask.">Delete all</button>
     <span id="rgnEditing"></span>
     <div id="rgnLayers"></div>
     <span class="fovhint" id="rgnHint"></span>
@@ -405,6 +634,9 @@ import { saveSetup, loadSetup, saveImage, loadImage,
 
 const $ = s => document.querySelector(s);
 let SCHEMA = [], DEFAULTS = {}, params = {}, haveImage = false, lastPng = null;
+// The one-line note under each card heading, from the engine. Empty against an engine
+// older than they are, which degrades to the bare headings the page always had.
+let GROUP_NOTES = {};
 let PIGMENTS = {};
 // Both come from the engine's ready message, because both are the ENGINE's facts: which
 // presets are swirl-kind (and so have centres to place) and how many centres it will read.
@@ -596,7 +828,10 @@ function renderWidth(){
       ? Math.max(64, Math.round(nw * FULL_MAX_SIDE / longest))
       : nw);
   }
-  const w = $('#wipe').clientWidth || 640;
+  // The pane, not the box: in split view the painting occupies half the width, and
+  // painting it at the full box width would double the cost of every render for a picture
+  // shown at half the size.
+  const w = ($('#wipe').clientWidth || 640) / paneScale();
   return workWidth(Math.min(Math.round(w * dpr), PREVIEW_CAP));
 }
 
@@ -690,10 +925,25 @@ const FINE = {
   Flow: ['flow_coh', 'flow_scale', 'flow_rot', 'flow_drift'],
 };
 const FINE_CARD = name => `${name} · fine`;
+// ONE LINE UNDER EACH CARD HEADING. A group name is a filing decision -- it says which
+// drawer a control is in, not what the drawer is for -- and seven of them in a column is
+// the point at which a panel stops explaining itself. The text comes from the ENGINE
+// (oilpaint/schema.py's GROUP_NOTES), like the row labels and for the same reason.
+// A `X · fine` card takes its own line rather than X's: "trims on the preset above" is
+// exactly what distinguishes it from the card it was demoted out of, and the claim is
+// measured -- it is the one-line summary of the scripts/knob_impact.py table over FINE.
+const noteFor = name => {
+  const base = name.replace(' · fine', '');
+  return base !== name
+    ? `Trims on the ${base.toLowerCase()} preset above \u2014 each moves the picture a `
+      + 'fraction as much as the preset itself does.'
+    : (GROUP_NOTES[name] || '');
+};
 async function boot(restore = true){
   setStatus('starting the engine...', true);
   const j = await startEngine();
   SCHEMA = j.schema; DEFAULTS = j.defaults; PIGMENTS = j.pigments || {};
+  GROUP_NOTES = j.groupNotes || {};
   FLOW_KINDS = j.flowKinds || {}; MAX_VORTICES = j.maxVortices || 0;
   REGION_LEGEND = j.regionLegend || []; MAX_REGIONS = j.maxRegions || 0;
   // WHICH FIELDS a region may carry is the engine's answer, never a list here --
@@ -747,12 +997,14 @@ async function boot(restore = true){
     if(!g){ g = {name: gname, items: []}; groups.push(g); }
     g.items.push(c);
   }
-  const mkCard = (name, items) => {
+  const mkCard = (name, items, front) => {
     const card = document.createElement('section');
     card.className = 'card';
-    card.innerHTML = `<h2>${name}<em>${items.length}</em></h2>`;
+    const note = noteFor(name);
+    card.innerHTML = `<h2>${name}<em>${items.length}</em></h2>`
+      + (note ? `<p class="csub">${note}</p>` : '');
     items.forEach(c => {
-      card.appendChild(control(c));
+      card.appendChild(control(c, front));
       const t = CARD_TOOLS[c.name];
       if(!t) return;
       const b = document.createElement('button');
@@ -768,7 +1020,7 @@ async function boot(restore = true){
   // hidden and the front row is empty.
   let front = FRONT_GROUPS.map(n => groups.find(g => g.name === n)).filter(Boolean);
   if(!front.length) front = groups.slice(0, 1);
-  front.forEach(g => host.appendChild(mkCard(g.name, g.items)));
+  front.forEach(g => host.appendChild(mkCard(g.name, g.items, true)));
 
   let nAdv = 0;
   // The demoted trims first, so a visitor who opens Advanced looking for the rest of the
@@ -776,7 +1028,7 @@ async function boot(restore = true){
   const fine = groups.filter(g => Object.keys(FINE).some(n => g.name === FINE_CARD(n)));
   for(const g of fine.concat(groups.filter(g => !fine.includes(g)))){
     if(front.includes(g)) continue;
-    adv.appendChild(mkCard(g.name, g.items));
+    adv.appendChild(mkCard(g.name, g.items, false));
     nAdv += g.items.length;
   }
   $('#advCount').textContent = nAdv;
@@ -807,7 +1059,45 @@ async function restoreImage(){
   }
 }
 
-function control(c){
+// THE ROW'S NAME. The label leads and the field name follows, small and dim, and the
+// second half is the one that had to be argued for: `target_n` is not a label, but it IS
+// the contract -- what `scripts/paint.py` takes, what `Copy setup` writes, what a saved
+// session stores. Dropping it would tidy the row by cutting the path from "I found a look
+// on the page" to "I can render it from the command line", so both are shown.
+//
+// The label itself comes from the ENGINE, out of oilpaint/schema.py's LABELS, for the
+// reason the schema comes from there at all: a control surface that exists twice is one
+// that disagrees with itself. `|| c.name` is the degradation, not a default -- a page
+// talking to an engine older than the labels shows what it always showed.
+const rowName = c =>
+  `<span class="name">${c.label || c.name}<code>${c.name}</code></span>`;
+// The unit, where the number is meaningless without one. `<u>` for a hook, not for a
+// meaning -- the CSS strips the underline.
+const rowUnit = c => c.unit ? `<u>${c.unit}</u>` : '';
+// The first sentence of the help, which is the line that stops a slider being anonymous.
+// Front cards only: they are the five-row introduction to the tool, and Advanced is
+// forty rows where the same treatment would be a wall of prose rather than a panel. The
+// full text is still one `help text` click away on every row, everywhere.
+// A LEAD THAT ONLY RESTATES THE LABEL IS WORSE THAN NO LEAD. Several of the help texts
+// open by naming the control -- `target_n` is "Stroke budget. A CEILING, not a quota...",
+// `min_cell` is "Smallest stroke. Below ~8px..." -- which was fine while the row was
+// headed `target_n` and is a line saying nothing now that it is headed Stroke budget. So a
+// first sentence the label has already said is dropped and the next one used; a control
+// whose whole help was that sentence gets no lead, because the label and the unit have
+// already said all of it.
+const norm = t => t.toLowerCase().replace(/[^a-z0-9]/g, '');
+const rowLead = (c, front) => {
+  if(!front) return '';
+  const label = norm(c.label || '');
+  for(const part of c.help.split('. ')){
+    const n = norm(part);
+    if(label && n.startsWith(label) && n.length - label.length <= 12) continue;
+    return `<div class="lead">${part.trim().replace(/\.$/, '')}.</div>`;
+  }
+  return '';
+};
+
+function control(c, front){
   const row = document.createElement('div');
   row.className = 'row' + (c.kind === 'bool' ? ' chk' : '');
   row.dataset.name = c.name;
@@ -818,7 +1108,7 @@ function control(c){
 
   if(c.kind === 'bool'){
     row.innerHTML = `<label><input type="checkbox" ${v?'checked':''}>
-      <span class="name">${c.name}</span></label><div class="hint">${c.help}</div>`;
+      ${rowName(c)}</label><div class="hint">${c.help}</div>`;
     const chk = row.querySelector('input');
     chk.id = 'ctl-' + c.name;
     chk.addEventListener('change', e => set(c.name, e.target.checked));
@@ -827,8 +1117,8 @@ function control(c){
     // `palette` is the one choice whose options are not self-describing, so it gets the
     // swatch strip. Nothing else on the panel needs one and nothing else gets one.
     const sw = c.name === 'palette' ? '<div class="swatch" aria-hidden="true"></div>' : '';
-    row.innerHTML = `<label><span class="name">${c.name}</span></label>
-      <select>${opts}</select>${sw}<div class="hint">${c.help}</div>`;
+    row.innerHTML = `<label>${rowName(c)}</label>
+      <select>${opts}</select>${sw}${rowLead(c, front)}<div class="hint">${c.help}</div>`;
     const sel = row.querySelector('select');
     sel.id = 'ctl-' + c.name;
     const strip = row.querySelector('.swatch');
@@ -839,15 +1129,18 @@ function control(c){
     });
   } else {
     const dec = c.kind === 'int' ? 0 : decimals(c.step);
-    row.innerHTML = `<label><span class="name">${c.name}</span>
-      <span class="val">${fmt(v,dec)}</span></label>
+    row.innerHTML = `<label>${rowName(c)}
+      <span class="val">${fmt(v,dec)}${rowUnit(c)}</span></label>
       <input type="range" min="${c.min}" max="${c.max}" step="${c.step}" value="${v}">
-      <div class="hint">${c.help}</div>`;
-    const inp = row.querySelector('input'), out = row.querySelector('.val');
+      ${rowLead(c, front)}<div class="hint">${c.help}</div>`;
+    const inp = row.querySelector('input[type=range]'), out = row.querySelector('.val');
     inp.id = 'ctl-' + c.name;
     inp.addEventListener('input', e => {
       const n = c.kind === 'int' ? parseInt(e.target.value,10) : parseFloat(e.target.value);
-      out.textContent = fmt(n,dec); set(c.name, n);
+      out.innerHTML = fmt(n,dec) + rowUnit(c); set(c.name, n);
+      // The focus map's strength lives on two controls -- this row and the one in the tool
+      // strip -- and they are the SAME control, so a move on either has to show on both.
+      if(c.name === 'foveal_strength') fovSyncStrength();
     });
   }
   return row;
@@ -1212,6 +1505,10 @@ function showStats(s, draft){
 (function wipe(){
   const el = $('#wipe'), top = $('#top'), bar = $('#bar');
   let p = 50;
+  // In split view there is no divider to drag, and dragging one anyway is exactly the
+  // distraction the view exists to remove: a click that lands on the photograph but outside
+  // a tool's own canvas would otherwise slide a bar across the thing being marked up.
+  const split = () => el.classList.contains('split');
   const apply = () => {
     top.style.clipPath = `inset(0 0 0 ${p}%)`;
     bar.style.left = `${p}%`;
@@ -1223,14 +1520,16 @@ function showStats(s, draft){
     apply();
   };
   el.addEventListener('pointerdown', e => {
+    if(split()) return;
     el.setPointerCapture(e.pointerId); set(e.clientX); e.preventDefault();
   });
   el.addEventListener('pointermove', e => {
-    if(el.hasPointerCapture(e.pointerId)) set(e.clientX);
+    if(!split() && el.hasPointerCapture(e.pointerId)) set(e.clientX);
   });
   el.addEventListener('pointerup', e => el.releasePointerCapture(e.pointerId));
   // Keyboard: the divider is a real control, so it has to be reachable without a pointer.
   el.addEventListener('keydown', e => {
+    if(split()) return;
     const step = e.shiftKey ? 10 : 2;
     if(e.key === 'ArrowLeft'){ p = Math.max(0, p - step); }
     else if(e.key === 'ArrowRight'){ p = Math.min(100, p + step); }
@@ -1264,6 +1563,102 @@ function showStats(s, draft){
   window.wipeReset = () => { p = 50; apply(); };
 })();
 
+/**
+ * SIDE BY SIDE INSTEAD OF THE WIPE, whenever the picture is being marked up.
+ *
+ * The wipe answers "how does the painting differ from the photograph" -- the question you
+ * ask of a render. Marking the picture asks a different one, and needs the photograph whole
+ * and still: a divider across the middle of it is something to work around, and it moves
+ * whenever a click lands outside the tool's own canvas. So an armed tool splits the box in
+ * two -- the photograph and whatever you are drawing on it on the left, the painting on the
+ * right -- and every tool's canvas lands on the left half, so the rule is one rule.
+ *
+ * One class, no DOM surgery and no second copy of the picture -- see the CSS block for what
+ * moves where and why a duplicate <img> would be the wrong shape.
+ */
+/**
+ * The left pane's corner tag, from its ONE writer.
+ *
+ * It has two authors now -- the upload names the file, and the split view adds what is
+ * drawn over it -- and two authors writing one string by appending to what they find there
+ * is how the file name ends up with two suffixes, or none. So the file name is kept on the
+ * element and the tag is composed from it; `tagSource()` with no argument re-composes.
+ */
+function tagSource(text){
+  const t = $('#tagL');
+  if(text !== undefined) t.dataset.src = text;
+  const over = overlayName();
+  t.textContent = (t.dataset.src || 'source') + (over ? ' + ' + over : '');
+}
+
+/** What the armed tool draws over the photograph, in the visitor's words. Read off the
+ *  bars, like everything else about which tool is armed, so there is no fourth place that
+ *  could disagree about it. */
+const overlayName = () =>
+    !$('#rgnBar').hidden ? 'mask'
+  : !$('#fovBar').hidden ? 'focus map'
+  : !$('#vtxBar').hidden ? 'swirl centres'
+  : '';
+
+function wipeSplit(on){
+  const el = $('#wipe');
+  el.classList.toggle('split', on);
+  tagSource();
+  // Not a slider any more, so it must not say it is one: a divider that cannot be dragged
+  // still reachable by Tab and announced with a value is worse than no control at all.
+  el.setAttribute('role', on ? 'group' : 'slider');
+  el.setAttribute('aria-label', on
+    ? 'The photograph with its mask, beside the painting'
+    : 'Compare source and painting');
+  if(on) el.removeAttribute('aria-valuenow'); else el.setAttribute('aria-valuenow', '50');
+  // The box's own width rule changes with the number of panes in it, so it has to be
+  // re-measured -- but NOT re-rendered. The painting already on screen is simply drawn
+  // smaller; recomputing it would spend seconds of CPU on a tool being opened, and the
+  // next render picks the new width up on its own.
+  sizeWipe();
+}
+
+/**
+ * WHERE A POINTER IS, IN THE CANVAS'S OWN PIXELS.
+ *
+ * Every tool used to do this itself, as `(clientX - r.left) / r.width * c.width` -- which
+ * says the bitmap fills its element box. In the window it does. IN FULL SCREEN IT DOES NOT:
+ * the box becomes 100vw x 100vh, the picture is letterboxed inside it by `object-fit`, and
+ * that arithmetic maps a click to a bitmap pixel some way from the one under the pointer.
+ * So a mark appeared offset from where it was made, in all three tools at once, and only
+ * full screen -- which is exactly when you have zoomed in to place something precisely.
+ *
+ * `contain` puts the bitmap at the largest scale that fits and centres what is left over,
+ * so inverting it is that scale and that offset. It is applied in both modes (see the CSS),
+ * which is what makes this one formula rather than a question about the computed style
+ * asked once per pointermove.
+ */
+function maskPoint(c, e){
+  const r = c.getBoundingClientRect();
+  const s = Math.min(r.width / c.width, r.height / c.height) || 1;
+  return [(e.clientX - r.left - (r.width - c.width * s) / 2) / s,
+          (e.clientY - r.top - (r.height - c.height * s) / 2) / s];
+}
+
+/** The same point as a fraction of the picture, which is how a vortex is stored. */
+function maskFrac(c, e){
+  const p = maskPoint(c, e);
+  return [p[0] / c.width, p[1] / c.height];
+}
+
+/** The point, or null when the pointer is OUTSIDE the picture -- which in full screen is
+ *  the letterbox bars, and is not a place a mark can be made. Before this, a click on the
+ *  black beside the picture was clamped to the nearest edge pixel and quietly filled from
+ *  there. Only the START of a mark is tested: dragging a brush out of the frame and back
+ *  is ordinary, and the dab clips itself. */
+function maskHit(c, e){
+  const p = maskPoint(c, e);
+  return (p[0] >= 0 && p[1] >= 0 && p[0] < c.width && p[1] < c.height) ? p : null;
+}
+
+/** Panes across the box: 2 in split view, 1 otherwise. */
+const paneScale = () => $('#wipe').classList.contains('split') ? 2 : 1;
+
 // Size the wipe box so the whole picture fits without scrolling the controls away. Both
 // layers share this box, so the clip stays aligned by construction.
 function sizeWipe(){
@@ -1271,7 +1666,10 @@ function sizeWipe(){
   if(el.hidden) return;
   const avail = $('.stage').clientWidth - 28;
   const maxH = Math.max(240, window.innerHeight * 0.62);
-  el.style.width = Math.min(avail, maxH * aspect) + 'px';
+  // The height bound is on a PANE, not on the box: two panes side by side may be twice as
+  // wide before either of them is too tall. Without the factor the split view would show
+  // two half-size pictures in a box sized for one full-size one.
+  el.style.width = Math.min(avail, paneScale() * maxH * aspect) + 'px';
 }
 // Resizing the window changes the box, and with it the resolution the painting should be
 // computed at. Re-render only when the change is big enough to see -- a render is seconds
@@ -1536,15 +1934,13 @@ function vtxToggle(fx, fy){
   // without it every click would also fling the comparison divider.
   c.addEventListener('pointerdown', e => {
     e.stopPropagation(); e.preventDefault();
-    const r = c.getBoundingClientRect();
-    down = [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height];
+    down = maskFrac(c, e);
   });
   c.addEventListener('pointermove', e => e.stopPropagation());
   c.addEventListener('pointerup', e => {
     e.stopPropagation();
     if(!down) return;
-    const r = c.getBoundingClientRect();
-    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    const [fx, fy] = maskFrac(c, e);
     // A drag is not a click. Without this, grabbing the wipe divider through this layer
     // would drop a vortex wherever the pointer was released.
     if(Math.hypot(fx - down[0], fy - down[1]) < 0.01
@@ -1559,6 +1955,11 @@ function vtxMode(on){
   // asks you to do is CLICK THE PICTURE. So opening it brings the picture and the bar back
   // into view -- without that, the tool opens somewhere the visitor cannot see and the only
   // feedback is a button changing colour.
+  // See fovMode for the rule. `keep` is the exception it needs: the swirl tool is itself
+  // aimed at the selected layer and names that layer in its own bar, so handing it the
+  // surface must not throw the selection away -- that would make "place a swirl in this
+  // layer" impossible, which is the one thing the tool is for.
+  if(on){ fovMode(false); rgnMode(false, true); }
   if(on) $('#vtxBar').scrollIntoView({block: 'center', behavior: 'smooth'});
   const c = $('#vtxCanvas');
   $('#vtxBtn').classList.toggle('on', on);
@@ -1570,6 +1971,7 @@ function vtxMode(on){
   // composition ends up with swirls nobody meant to put there.
   c.classList.toggle('on', visible);
   if(on) vtxStatus();
+  toolState();
 }
 
 // The setup, written down on every CHANGE -- a few hundred bytes of numbers, no image --
@@ -1733,8 +2135,12 @@ function showControl(name, value){
   // Formatted from the control's own step, exactly as control() does it -- a hard-coded
   // number of decimals here would read differently from every neighbouring row.
   const c = SCHEMA.find(x => x.name === name);
-  if(out) out.textContent = mixed ? '\u2014'
-    : fmt(value, c && c.kind !== 'int' ? decimals(c.step) : 0);
+  // innerHTML, not textContent, and the unit is the reason: the value carries it exactly as
+  // control() writes it, and a row set from code that dropped it would read differently
+  // from the same row set by hand.
+  if(out) out.innerHTML = (mixed ? '\u2014'
+    : fmt(value, c && c.kind !== 'int' ? decimals(c.step) : 0))
+    + (!mixed && c && c.unit ? `<u>${c.unit}</u>` : '');
 }
 
 /** Set a schema control from code, panel and all, so the two cannot disagree.
@@ -1773,11 +2179,7 @@ function dab(x, y){
 (function brush(){
   const c = $('#fovCanvas');
   let last = null;
-  const at = e => {
-    const r = c.getBoundingClientRect();
-    return [(e.clientX - r.left) / r.width * c.width,
-            (e.clientY - r.top) / r.height * c.height];
-  };
+  const at = e => maskPoint(c, e);
   // Dabs along the segment rather than one per pointermove: a fast drag delivers events
   // tens of pixels apart and would leave a dotted line instead of a stroke.
   const stroke = (x, y) => {
@@ -1795,9 +2197,11 @@ function dab(x, y){
   // without it each dab would also fling the comparison divider to wherever the pointer is.
   c.addEventListener('pointerdown', e => {
     e.stopPropagation(); e.preventDefault();
+    const p = maskHit(c, e);
+    if(!p) return;                     // the letterbox beside the picture, in full screen
     c.setPointerCapture(e.pointerId);
     brushing = true; last = null;
-    stroke(...at(e));
+    stroke(...p);
   });
   c.addEventListener('pointermove', e => {
     e.stopPropagation();
@@ -1815,9 +2219,67 @@ function dab(x, y){
   c.addEventListener('pointercancel', end);
 })();
 
+/**
+ * WHICH TOOL IS ARMED, said once, in one place.
+ *
+ * The four tools that mark the picture are mutually exclusive in the code -- each mode
+ * function switches the others off, because two click-to-paint canvases stacked on one
+ * surface means the top one silently eats the click and the other looks broken. Nothing in
+ * the page said so: three separate buttons that each looked like an independent toggle.
+ * The segmented control is the widget whose shape already means "these are the states of
+ * one thing", so exclusivity is now the control doing its job rather than a surprise.
+ *
+ * Read off the BARS rather than tracked in a variable of its own. Every mode function
+ * already sets its bar's `hidden`, and a second source of truth for "what is armed" is
+ * exactly the kind of state that drifts -- the swirl tool's availability bug was one.
+ *
+ * The swirl chip only ever APPEARS while that tool is on, and only ever turns it off. It
+ * is armed from the Flow card, where the field it belongs to is chosen and where its dimmed
+ * state reads as "this field has no swirls in it"; a second way to arm it here would undo
+ * that, so this is a readout with an off switch and not a fourth button.
+ */
+function toolState(){
+  const fov = !$('#fovBar').hidden, rgn = !$('#rgnBar').hidden, vtx = !$('#vtxBar').hidden;
+  // SIDE BY SIDE WHENEVER THE PICTURE IS BEING WORKED ON, which is any armed tool. It
+  // started on Layers alone, on the argument that the swirl markers are a property of the
+  // PAINTING and so belong on that side -- and that was the wrong cut. Every tool here puts
+  // its canvas on one surface and asks for clicks on it, so the rule a visitor should have
+  // to learn is one rule: THE LEFT PANE IS WHAT YOU MARK, THE RIGHT PANE IS WHAT IT MAKES.
+  // Splitting for one tool and wiping for the other two would teach that rule and then
+  // break it, and a vortex is a composition point -- it reads on the photograph at least as
+  // well as on the painting, which is what made the original argument only half right.
+  wipeSplit(fov || rgn || vtx);
+  $('#fovBtn').classList.toggle('on', fov);
+  $('#rgnBtn').classList.toggle('on', rgn);
+  $('#toolVtx').hidden = !vtx;
+  $('#toolVtx').classList.toggle('on', vtx);
+  $('#toolNone').classList.toggle('on', !fov && !rgn && !vtx);
+  guide(fov ? ($('#fovErase').checked
+               ? 'Drag on the picture to <b>wipe the map off</b> there.'
+               : 'Paint where the eye should go \u2014 <b>darker means more strokes</b> there.')
+      : rgn ? rgnGuide()
+      : vtx ? 'Click the picture to place a swirl centre; click a marker to remove it. '
+              + 'They <b>alternate direction</b>, so neighbours counter-rotate.'
+      : '');
+}
+
+/** The one next thing to do, ON the picture. Empty text takes the strip away. */
+function guide(html){
+  const g = $('#guide');
+  g.innerHTML = html || '';
+  g.hidden = !html;
+}
+
 function fovMode(on){
+  // THE EXCLUSIVITY WAS HALF-WIRED, and the segmented control is what made it worth
+  // finding: `rgnMode` released the other two, and neither of the other two released
+  // anything. So arming the focus map over an open Layers tool left both canvases live
+  // and interactive on one surface, the topmost silently took every click, and the tool
+  // whose button was lit did nothing -- the same failure the rgnMode line was written to
+  // prevent, from the other two directions. `if(on)` is what keeps the mutual calls from
+  // recursing: turning a tool OFF never reaches for another.
+  if(on){ rgnMode(false); vtxMode(false); }
   const c = $('#fovCanvas');
-  $('#fovBtn').classList.toggle('on', on);
   $('#fovBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
   $('#fovBar').hidden = !on;
   const visible = on && $('#fovShow').checked;
@@ -1825,12 +2287,36 @@ function fovMode(on){
   // Only interactive when it is actually visible: painting into a layer you cannot see is
   // how a map ends up with marks nobody meant to make.
   c.classList.toggle('on', visible);
+  // The strip carries `foveal_strength`, so opening it has to show the value the panel
+  // holds -- an armed tool whose own slider reads 0 while the picture follows the map at
+  // 0.8 is the page contradicting itself.
+  if(on){ fovSyncStrength(); fovMode.opened = true; }
+  toolState();
+}
+
+/** Put `foveal_strength` on the tool strip's copy of it. Display only. */
+function fovSyncStrength(){
+  const v = Number.isFinite(params.foveal_strength) ? params.foveal_strength : 0;
+  $('#fovStrength').value = v;
+  $('#fovStrengthV').textContent = fmt(v, 2);
 }
 
 $('#fovBtn').addEventListener('click', () => fovMode($('#fovBar').hidden));
 $('#fovShow').addEventListener('change', () => fovMode(!$('#fovBar').hidden));
 $('#fovClear').addEventListener('click', () => { maskClear(); schedule(); });
 $('#fovSize').addEventListener('input', e => { $('#fovSizeV').textContent = e.target.value; });
+// Paint or wipe is what the click DOES, so it leads the strip and it changes the sentence
+// on the picture. The checkbox is unchanged underneath -- only its skin and its place.
+$('#fovErase').addEventListener('change', toolState);
+// THE SAME CONTROL AS THE PANEL'S ROW, not a copy of it: it writes through `set()`, so the
+// layer branch, the session save and the re-render all happen exactly as they do for the
+// row, and `showControl` puts the value back on that row. Two widgets, one number.
+$('#fovStrength').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  $('#fovStrengthV').textContent = fmt(v, 2);
+  set('foveal_strength', v);
+  showControl('foveal_strength', v);
+});
 $('#fovWeight').addEventListener('input', e => {
   $('#fovWeightV').textContent = parseFloat(e.target.value).toFixed(2);
 });
@@ -1902,6 +2388,9 @@ const rgnWire = () => {
 };
 const rgnLive = () => Object.keys(rgnWire()).length > 0;
 /** True while the panel's colour rows are pointed at something other than the base. */
+// What the visitor last asked the erase chip for. See rgnEraseSync: on the Base the
+// chip is forced on, and a forced tick must not be mistaken for a choice.
+let rgnEraseWanted = false;
 const rgnEditingLayers = () => !(regionSel.length === 1 && regionSel[0] === 0);
 /** Where a fill goes: the selection's own layer, and the Base means erase. */
 const rgnTarget = () => (regionSel.find(id => id !== 0) ?? 0);
@@ -2192,13 +2681,54 @@ function rgnStatus(){
   // redraw is free and doing it here means there is one place that answers "the selection
   // changed" rather than one per tool.
   vtxDraw(); vtxStatus();
-  const t = rgnTarget();
-  $('#rgnHint').innerHTML = t === 0
-    ? 'The <b>Base</b> is selected, so clicking the picture <b>erases</b> back to it. '
-      + 'Press <code>+ Layer</code> to make a passage of your own.'
-    : `Click the picture to fill <b>Layer ${t}</b>, then move the Palette or Flow rows `
-      + '&mdash; they write to the selected layer, not to the whole picture. '
-      + '<code>Save mask</code> writes the file <code>--regions</code> reads.';
+  rgnEraseSync();
+  // The hint says what STAYS TRUE of the tool; the strip over the picture says what to do
+  // next. They used to be the same sentence in the further-away place.
+  $('#rgnHint').innerHTML = 'A stroke takes the layer its centre lands in, so an edge falls '
+    + 'on stroke boundaries and a rough mask still reads as deliberate. Colour never moves '
+    + 'a stroke; Flow re-combs that layer\u2019s own strokes and leaves the rest of the '
+    + 'picture exactly as it was. <b>Save mask</b> writes the PNG that '
+    + '<code>--regions</code> reads.';
+  toolState();
+}
+
+/**
+ * ERASING IS A CONTROL, not a consequence of the selection.
+ *
+ * It was "select the Base, then click the picture", which loaded one selection with two
+ * meanings -- which layer receives paint, and whether a click paints or wipes -- and
+ * announced the second only in a sentence at the end of the strip. That is the reported
+ * roughness in the layers flow, and the fix is to show the state rather than to explain it.
+ *
+ * On the Base the chip arms itself and goes read-only, because wiping is then the only
+ * thing a click can do; on a layer it holds whatever was last asked for, which is why the
+ * wanted flag exists rather than reading the checkbox back -- a forced tick is the page's
+ * answer, not the visitor's, and must not survive as one.
+ */
+function rgnEraseSync(){
+  const base = rgnTarget() === 0;
+  const e = $('#rgnErase');
+  e.disabled = base;
+  e.checked = base || rgnEraseWanted;
+  e.title = base
+    ? 'The base is selected, so a click can only wipe back to it. Make or select a layer '
+      + 'to paint into one.'
+    : 'Click the picture to wipe a passage back to the base.';
+}
+
+/** The one next thing to do, for whichever state the layers tool is in. */
+function rgnGuide(){
+  const t = rgnTargetNow();
+  const brush = rgnIsBrush();
+  const verb = brush ? 'Drag' : 'Click a passage';
+  if(rgnTarget() === 0 && !$('#rgnErase').checked)
+    return 'Press <b>+ New layer</b>, then ' + (brush ? 'drag on the picture to paint it.'
+      : 'click a passage of the picture to fill it.')
+      + ' With the base selected, a mark <b>wipes</b> back to it.';
+  return t === 0
+    ? `${verb} to <b>wipe back to the base</b>.`
+    : `${verb} to ${brush ? 'paint' : 'fill'} <b>Layer ${t}</b> \u2014 the Palette and Flow `
+      + 'rows below then write to that layer.';
 }
 
 /** The source at the mask's own grid. Drawn rather than taken from `sourcePixels`, whose
@@ -2234,27 +2764,8 @@ function rgnFill(fx, fy){
   const t2 = tol * tol;
   const img = regionCtx.getImageData(0, 0, W, H);
   const d = img.data;
-  const target = rgnTarget();
-  const col = REGION_LEGEND[target] || [0, 0, 0];
-  const cr = Math.round(col[0] * 255), cg = Math.round(col[1] * 255),
-        cb = Math.round(col[2] * 255);
-  const ca = target === 0 ? 0 : 255;
-  // Whether this fill can have changed the painting, which is NOT the same question as
-  // whether the target layer is live: a fill also TAKES pixels, so painting an inert
-  // layer over a live one changes what the live one catches. Answering it with the
-  // target alone left a real edit unrendered.
-  let touchedLive = !rgnInert(target);
-  // Painting one pixel, factored out because it is the only thing the two modes share.
-  // `touchedLive` is settled here rather than after: a fill also TAKES pixels, so painting
-  // an INERT layer over a live one changes what the live one catches. Answering "did this
-  // change the picture" with the target layer alone left a real edit unrendered.
-  const put = q => {
-    if(!touchedLive && d[q + 3] >= 128){
-      const was = rgnNearest(d[q], d[q + 1], d[q + 2]);
-      if(was !== target && !rgnInert(was)) touchedLive = true;
-    }
-    d[q] = cr; d[q + 1] = cg; d[q + 2] = cb; d[q + 3] = ca;
-  };
+  const target = rgnTargetNow();
+  const [put, st] = rgnPutter(d, target);
   // Green weighted most, blue least: the eye's own sensitivity, and the difference between
   // a fill that follows a sky and one that stops at every JPEG block.
   const near = q => {
@@ -2286,6 +2797,49 @@ function rgnFill(fx, fy){
     }
   }
   regionCtx.putImageData(img, 0, 0);
+  rgnCommit(st.live, n ? rgnCount(n, target, 'filled')
+              : 'nothing filled \u2014 raise the fill spread, or turn off "one patch only"');
+}
+
+/**
+ * WHICH LAYER A MARK GOES INTO. The erase chip wins over the selection: wiping is a thing
+ * the mark DOES, and the selection stays what it always was -- which layer the panel's rows
+ * are editing. Both the fill and the brush ask this, which is why it is a function.
+ */
+const rgnTargetNow = () => $('#rgnErase').checked ? 0 : rgnTarget();
+
+/** "filled 900 px into layer 2" / "wiped 900 px back to the base". */
+const rgnCount = (n, target, verb) => target === 0
+  ? `wiped ${n} px back to the base` : `${verb} ${n} px into layer ${target}`;
+
+/**
+ * The writer that puts one pixel into a region, and the flag that says whether doing so can
+ * have changed the painting.
+ *
+ * `st.live` is NOT the same question as "is the target layer live": a mark also TAKES
+ * pixels, so painting an inert layer over a live one changes what the live one catches.
+ * Answering it with the target alone left a real edit unrendered, which is why it is
+ * settled inside the writer rather than after it -- and why the flag is an object: a brush
+ * stroke is hundreds of dabs and they all have to accumulate into the same answer.
+ */
+function rgnPutter(d, target){
+  const col = REGION_LEGEND[target] || [0, 0, 0];
+  const cr = Math.round(col[0] * 255), cg = Math.round(col[1] * 255),
+        cb = Math.round(col[2] * 255);
+  const ca = target === 0 ? 0 : 255;
+  const st = {live: !rgnInert(target)};
+  return [q => {
+    if(!st.live && d[q + 3] >= 128){
+      const was = rgnNearest(d[q], d[q + 1], d[q + 2]);
+      if(was !== target && !rgnInert(was)) st.live = true;
+    }
+    d[q] = cr; d[q + 1] = cg; d[q + 2] = cb; d[q + 3] = ca;
+  }, st];
+}
+
+/** Everything an edit to the mask owes once it is FINISHED -- once per fill, and once per
+ *  brush STROKE rather than once per dab: a dab is microseconds and a render is a second. */
+function rgnCommit(touchedLive, msg){
   regionKey++;
   regionCounts = null;
   rgnScan();
@@ -2295,11 +2849,120 @@ function rgnFill(fx, fy){
   // what the base does -- provably, by the equivalence invariant. Re-rendering to prove that
   // costs a second and teaches the wrong thing about which action changes the picture.
   if(rgnLive() && touchedLive) schedule();
-  setStatus(n ? `filled ${n} px into region ${target}`
-              : 'nothing filled — raise the tolerance, or turn off contiguous');
+  setStatus(msg);
 }
 
 /** True while a layer still says exactly what the panel says, so painting it changes nothing. */
+/**
+ * THE BRUSH. The fill is a wand -- it asks the photograph where the passage ends -- and the
+ * wand has nothing to say about a passage the photograph does not delimit: a face against a
+ * busy background, half a sky, the shaded side of a wall that is one continuous gradient.
+ * So this paints the mask by hand, and the two share everything below the mark: the same
+ * target, the same erase chip, the same per-pixel writer and the same commit.
+ *
+ * IT IS HARD-EDGED, and that is forced rather than chosen. `ctx.arc().fill()` antialiases
+ * its rim, which for a WEIGHT FIELD -- the focus map -- is exactly right and for a LABEL
+ * field is the bug the whole mask pipeline is built to avoid: a half-alpha rim pixel is
+ * dropped by regionBytes' `< 128` test, and a rim pixel whose colour is a blend of two
+ * legend entries is resolved by rgnNearest to whichever region happens to be closest to the
+ * average -- which is how you invent a region 3 along the boundary between 2 and 4. It is
+ * the same argument the NEAREST resample makes one step later, and the reason this dab
+ * writes pixels directly instead of drawing a circle.
+ *
+ * Returns the rectangle it touched, so the stroke can put back only what it changed.
+ */
+function rgnDab(d, W, H, put, cx, cy, r){
+  const r2 = r * r;
+  const x0 = Math.max(0, Math.floor(cx - r)), x1 = Math.min(W - 1, Math.ceil(cx + r));
+  const y0 = Math.max(0, Math.floor(cy - r)), y1 = Math.min(H - 1, Math.ceil(cy + r));
+  let n = 0;
+  for(let y = y0; y <= y1; y++){
+    const dy = y - cy;
+    for(let x = x0; x <= x1; x++){
+      const dx = x - cx;
+      if(dx * dx + dy * dy > r2) continue;
+      put(4 * (y * W + x));
+      n++;
+    }
+  }
+  return {x0, y0, x1, y1, n};
+}
+
+/** Brush radius in mask pixels, as a percentage of the long side -- the focus map's own
+ *  convention, so the two brushes mean the same thing by the same number. */
+const rgnRadius = () => Math.max(1, (parseFloat($('#rgnSize').value) / 100)
+  * Math.max(regionCanvas.width, regionCanvas.height));
+
+// The stroke in progress. The pixel buffer is taken ONCE at pointerdown and written back
+// per move: a getImageData/putImageData pair of the whole mask on every pointermove is
+// megabytes of copying at pointer rate, and the dirty rectangle is what makes the write
+// back cost the brush rather than the canvas.
+let rgnStrokeState = null;
+
+function rgnBrushDown(x, y){
+  if(!regionCtx) return;
+  const W = regionCanvas.width, H = regionCanvas.height;
+  const img = regionCtx.getImageData(0, 0, W, H);
+  const target = rgnTargetNow();
+  const [put, st] = rgnPutter(img.data, target);
+  rgnStrokeState = {img, put, st, target, W, H, last: null, n: 0};
+  rgnBrushTo(x, y);
+}
+
+function rgnBrushTo(x, y){
+  const S = rgnStrokeState;
+  if(!S) return;
+  const r = rgnRadius();
+  // Dabs along the segment rather than one per pointermove: a fast drag delivers events
+  // tens of pixels apart and would leave a dotted line instead of a stroke. Same step as
+  // the focus map's brush, for the same reason.
+  const pts = [];
+  if(S.last){
+    const step = Math.max(1, r * 0.25);
+    const dx = x - S.last[0], dy = y - S.last[1];
+    const k = Math.ceil(Math.hypot(dx, dy) / step);
+    for(let i = 1; i <= k; i++) pts.push([S.last[0] + dx * i / k, S.last[1] + dy * i / k]);
+  } else {
+    pts.push([x, y]);
+  }
+  let lo = null;
+  for(const [px, py] of pts){
+    const b = rgnDab(S.img.data, S.W, S.H, S.put, px, py, r);
+    S.n += b.n;
+    lo = lo ? {x0: Math.min(lo.x0, b.x0), y0: Math.min(lo.y0, b.y0),
+               x1: Math.max(lo.x1, b.x1), y1: Math.max(lo.y1, b.y1)} : b;
+  }
+  S.last = [x, y];
+  if(lo && lo.x1 >= lo.x0 && lo.y1 >= lo.y0){
+    regionCtx.putImageData(S.img, 0, 0,
+      lo.x0, lo.y0, lo.x1 - lo.x0 + 1, lo.y1 - lo.y0 + 1);
+  }
+}
+
+function rgnBrushUp(){
+  const S = rgnStrokeState;
+  if(!S) return;
+  rgnStrokeState = null;
+  // One commit per STROKE, not per dab -- a dab is a few hundred microseconds and a render
+  // is a second, so committing inside the drag would make the brush unusable.
+  rgnCommit(S.st.live, S.n ? rgnCount(S.n, S.target, 'painted')
+                           : 'nothing painted \u2014 the brush fell outside the picture');
+}
+
+/** Wand or brush. One source of truth, read off the button, because the guidance strip, the
+ *  canvas handlers and the options in the strip all have to agree about which is armed. */
+const rgnIsBrush = () => $('#rgnModeBrush').classList.contains('on');
+
+function rgnModeSet(brush){
+  $('#rgnModeBrush').classList.toggle('on', brush);
+  $('#rgnModeFill').classList.toggle('on', !brush);
+  // Each mode's own settings, and only its own: the strip is already the longest thing on
+  // the page and a tolerance slider that does nothing is worse than one that is not there.
+  $('#rgnFillOpts').hidden = brush;
+  $('#rgnBrushOpts').hidden = !brush;
+  toolState();
+}
+
 function rgnInert(id){
   const L = regionLayers[id];
   if(!L || !L.visible) return true;
@@ -2329,40 +2992,72 @@ function regionBytes(w, h){
   return out;
 }
 
-function rgnMode(on){
+function rgnMode(on, keep){
   const c = $('#rgnCanvas');
-  $('#rgnBtn').classList.toggle('on', on);
   $('#rgnBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
   $('#rgnBar').hidden = !on;
   const visible = on && $('#rgnShow').checked;
   c.hidden = !visible;
   c.classList.toggle('on', visible);
-  // The three tools share one surface, and two of them are click-to-paint. Armed together
-  // the topmost silently takes the click, which reads as the other one being broken.
+  // The tools share one surface and are click-to-paint. Armed together the topmost
+  // silently takes the click, which reads as the other one being broken. All three mode
+  // functions now do this, not only this one -- see fovMode for the bug that hid in the
+  // two that did not.
   if(on){ fovMode(false); vtxMode(false); }
   // Closing the tool must put the panel back on the whole picture. Leaving it pointed at a
   // layer nobody can see is the worst shape a control can have: every slider still works,
-  // and none of them does what the visitor expects.
-  if(!on && rgnEditingLayers()) rgnSelect(0, false);
+  // and none of them does what the visitor expects. `keep` is the one case where the layer
+  // is NOT out of sight -- the swirl tool has taken the surface and names the same layer in
+  // its own bar. See vtxMode.
+  if(!on && !keep && rgnEditingLayers()) rgnSelect(0, false);
   if(on) rgnStatus();
+  toolState();
 }
 
 (function regionTool(){
   const c = $('#rgnCanvas');
-  // stopPropagation for the same reason the brush does it: this canvas sits inside the
-  // wipe's drag surface, so without it every fill would also fling the comparison divider.
+  const at = e => maskPoint(c, e);
+  // stopPropagation on every one, for the same reason the focus map's brush does it: this
+  // canvas sits inside the wipe's drag surface, so without it every mark would also fling
+  // the comparison divider. (In split view the divider stands down anyway, but the fill is
+  // reachable from the wipe view too, and a handler that is right for only one of them is
+  // the kind of thing that comes back.)
   c.addEventListener('pointerdown', e => {
     e.stopPropagation(); e.preventDefault();
-    const r = c.getBoundingClientRect();
-    rgnFill((e.clientX - r.left) / r.width * c.width,
-            (e.clientY - r.top) / r.height * c.height);
+    const p = maskHit(c, e);
+    if(!p) return;                     // the letterbox beside the picture, in full screen
+    if(rgnIsBrush()){ c.setPointerCapture(e.pointerId); rgnBrushDown(...p); }
+    else rgnFill(...p);
   });
-  c.addEventListener('pointermove', e => e.stopPropagation());
+  c.addEventListener('pointermove', e => {
+    e.stopPropagation();
+    if(rgnStrokeState) rgnBrushTo(...at(e));
+  });
+  // pointercancel as well as pointerup: a stroke abandoned by the browser (a gesture taking
+  // over, the pointer leaving the window) must still commit, or the mask keeps paint the
+  // engine was never told about.
+  const end = e => { e.stopPropagation(); rgnBrushUp(); };
+  c.addEventListener('pointerup', end);
+  c.addEventListener('pointercancel', end);
 })();
 
 $('#rgnBtn').addEventListener('click', () => rgnMode($('#rgnBar').hidden));
 $('#rgnShow').addEventListener('change', () => rgnMode(!$('#rgnBar').hidden));
 $('#rgnTol').addEventListener('input', e => { $('#rgnTolV').textContent = e.target.value; });
+$('#rgnModeFill').addEventListener('click', () => rgnModeSet(false));
+$('#rgnModeBrush').addEventListener('click', () => rgnModeSet(true));
+$('#rgnSize').addEventListener('input', e => { $('#rgnSizeV').textContent = e.target.value; });
+$('#rgnErase').addEventListener('change', () => {
+  // Only a click the chip could actually accept is a choice; the forced tick on the Base
+  // is the page's own answer and must not be remembered as the visitor's.
+  if(!$('#rgnErase').disabled) rgnEraseWanted = $('#rgnErase').checked;
+  toolState();
+});
+// The segmented control's own two buttons. `Compare` is the OFF state of all four tools --
+// the page with nothing armed, which is what the divider is for -- and the swirl chip only
+// ever turns its tool off; it is armed from the Flow card, where the field lives.
+$('#toolNone').addEventListener('click', () => { fovMode(false); rgnMode(false); vtxMode(false); });
+$('#toolVtx').addEventListener('click', () => vtxMode(false));
 $('#rgnAdd').addEventListener('click', () => {
   // The lowest free id, so the legend colours are used in order and a mask painted by hand
   // for `--region 1` means what the first layer here means.
@@ -2372,10 +3067,14 @@ $('#rgnAdd').addEventListener('click', () => {
   }
   if(!id){ setStatus(`the engine reads ${MAX_REGIONS - 1} regions, and they are all in use`); return; }
   rgnEnsure(id);
+  // A layer is made in order to be filled, so it never arrives armed to wipe -- and the
+  // Base's forced tick, which is what would otherwise be sitting there, is not a choice
+  // to carry forward.
+  rgnEraseWanted = false;
   rgnLayersBuild();
   rgnSelect(id, false);
   publishSetup();
-  setStatus(`region ${id} — click the picture to give it some paint`);
+  setStatus(`layer ${id} \u2014 click a passage of the picture to give it some paint`);
 });
 $('#rgnClear').addEventListener('click', () => {
   if(regionCtx) regionCtx.clearRect(0, 0, regionCanvas.width, regionCanvas.height);
@@ -2445,7 +3144,7 @@ function upload(f, restoring = false){
     vtxInit(); vtxStatus();
     // Name the file on the image itself. If this ever reads "painting.png", the source
     // pane is showing a previous result and the wipe is a painting of a painting.
-    $('#tagL').textContent = 'source · ' + (f.name || 'pasted image');
+    tagSource('source · ' + (f.name || 'pasted image'));
     // Seed the top layer with the source too, so the wipe is a valid comparison from the
     // first frame instead of showing a broken image until the first render lands.
     $('#out').src = origUrl;
@@ -2500,6 +3199,9 @@ $('#full').addEventListener('change', render);
 function autoMode(){ $('#render').hidden = $('#auto').checked; }
 $('#auto').addEventListener('change', () => { autoMode(); if($('#auto').checked) schedule(); });
 autoMode();
+// Once at start-up, so the segmented control and the picture's guidance strip agree with
+// the bars rather than with the markup's guess at them.
+toolState();
 // Defaults means DEFAULTS: `boot(false)` skips the saved panel it would otherwise restore.
 $('#reset').addEventListener('click', () => { boot(false).then(render); });
 $('#reseed').addEventListener('click', () => {
@@ -2530,7 +3232,7 @@ function clearImage(){
   $('#wipe').hidden = true; drop.hidden = false;
   $('#stats').hidden = true; lastStats = null;
   $('#dl').disabled = true; $('#clearTop').disabled = true;
-  $('#tagL').textContent = 'source';
+  tagSource('source');
   $('#src').removeAttribute('src'); $('#out').removeAttribute('src');
   $('#err').textContent = '';
   maskClear();

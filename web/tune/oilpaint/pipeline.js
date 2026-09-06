@@ -19,7 +19,7 @@ import * as strokes from './strokes.js';
 
 /** Mirrors the PaintConfig dataclass. Kept in this order for readability, not by need. */
 export const DEFAULTS = {
-  metric: 'var', target_n: 5000, tau: null, max_cell: 64, min_cell: 8, base_block: 16,
+  metric: 'var', target_n: 20000, tau: null, max_cell: 64, min_cell: 5, base_block: 16,
   tau_floor: 1e-4,
   foveal_strength: 0.0,
   kappa: 1.35, jitter_centre: 0.35, jitter_radius: 0.15, jitter_theta_deg: 20.0,

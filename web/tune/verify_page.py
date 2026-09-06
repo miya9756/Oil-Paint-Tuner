@@ -36,6 +36,21 @@ it caught a real defect -- not because it seemed prudent.
 | module files parse         | the compute moved into engine.worker.js and the oilpaint/
 |                            | JS package, which the inline-script syntax check cannot see.
 |                            | A typo there is the same blank-page failure, one file out.
+| one armed tool at a time   | the segmented TOOL control asserts that the four picture
+|                            | tools are exclusive. Wiring the assertion up found that only
+|                            | rgnMode released the others: arming the focus map over an
+|                            | open Layers tool left two live click-to-paint canvases on
+|                            | one surface, the topmost ate every click, and the tool whose
+|                            | button was lit did nothing.
+| a row says what it is      | every control was headed by its Python identifier, with the
+|                            | prose that would rescue it hidden behind the help toggle. The
+|                            | label comes from schema.py now and the identifier stays under
+|                            | it -- it is what paint.py takes. Two ways to get this wrong:
+|                            | a label that goes missing, and a lead line that only restates
+|                            | the label ("Stroke budget. A CEILING, not a quota...").
+| erase is a control         | erasing a passage was "select the Base, then click", which
+|                            | loaded one selection with two meanings and said so only in
+|                            | prose at the end of a strip.
 | index.html AT RUN TIME     | the one dynamic check, and it is here because everything
 |                            | above it is static. `const s = spec()` was read one line
 |                            | before its own declaration: valid syntax, ReferenceError at
@@ -486,6 +501,213 @@ def page_runtime(node):
     check(sorted(seen) == expect and len(seen) == len(set(seen)),
           "and every schema control not deliberately hidden is on exactly one card",
           str(sorted(set(expect) ^ set(seen))))
+
+    # THE ROWS SAY WHAT THEY ARE. Every control was headed by its Python identifier in
+    # monospace, and the prose that would have rescued it is display:none until the help
+    # toggle is on -- so the tool's first impression was forty identifiers and no words.
+    # Both halves are pinned, and the second is the one that needed arguing for: the
+    # identifier STAYS, because it is what scripts/paint.py takes and what `Copy setup`
+    # writes, so a tidier row must not cost the page-to-command-line path.
+    rows = cold["rowMarkup"]
+    named = [n for n, h in rows.items()
+             if f"<code>{n}</code>" in h and re.search(r'class="name">([^<]+)<code>', h)]
+    check(len(named) == len(rows),
+          "every panel row is headed by a human label with its field name under it",
+          str(sorted(set(rows) - set(named))[:4]))
+    labels = {r["name"]: r["label"] for r in base["schema"]["schema"]}
+    check(all(v and v != k for k, v in labels.items()),
+          "and no label is just the field name back again",
+          str([k for k, v in labels.items() if not v or v == k][:4]))
+    # A LEAD THAT ONLY RESTATES THE LABEL. `target_n`'s help opens "Stroke budget." and
+    # `min_cell`'s opens "Smallest stroke." -- fine under the old identifier headings, and a
+    # line saying nothing under the new ones. Caught here, before the front cards shipped
+    # with three rows whose one always-visible sentence was their own title.
+    def _n(t):
+        return re.sub(r"[^a-z0-9]", "", t.lower())
+    leads = {n: (re.search(r'class="lead">(.*?)</div>', h, re.S) or [None, ""])[1]
+             for n, h in rows.items()}
+    # The page's own rule, restated: a lead is dropped when it is the label and NOTHING
+    # else. A sentence that opens with the name and then goes on to explain is not the
+    # defect -- `broken_color`'s help does exactly that and is the most useful line on the
+    # card -- so the bound is on what is left after the name, not on how it starts.
+    echoes = [n for n, t in leads.items()
+              if t and _n(t).startswith(_n(labels.get(n, "")))
+              and len(_n(t)) - len(_n(labels.get(n, ""))) <= 12]
+    check(not echoes, "and no lead line is just the label back again", str(echoes))
+    check(cold["cardNotes"][:3] and all(cold["cardNotes"][:3]),
+          "every front card carries the note that says what the group is for",
+          str(cold["cardNotes"][:3]))
+
+    # ONE ARMED TOOL AT A TIME. The segmented control is the page ASSERTING that the
+    # picture tools are exclusive, so the assertion is driven rather than trusted -- and
+    # wiring it up is what found that only rgnMode released the others, leaving two live
+    # click-to-paint canvases stacked on one surface with the top one eating every click.
+    check(cold["toolIdle"]["none"] == ["on"] and cold["toolIdle"]["guideHidden"] is True,
+          "Compare is the tool bar's off state, and it shows no guidance strip",
+          str(cold["toolIdle"]))
+    check(cold["toolFov"]["fov"] == ["on"] and cold["toolFov"]["none"] == []
+          and cold["toolFov"]["guideHidden"] is False,
+          "arming a tool lights its chip, releases Compare and puts the next step on the "
+          "picture", str(cold["toolFov"]))
+    check(cold["toolRgn"]["rgn"] == ["on"] and cold["toolRgn"]["fov"] == []
+          and cold["toolRgn"]["fovBar"] is True,
+          "and arming the next one RELEASES the first, bar and chip together",
+          str(cold["toolRgn"]))
+    # The swirl chip is a readout with an off switch, never a second way to arm the tool:
+    # it is armed from the Flow card, where the field it belongs to is chosen.
+    check(cold["toolVtxShown"] is True and cold["toolVtxRgnBar"] is True,
+          "the swirl tool shows in the bar and takes the surface from the layers tool")
+    check(cold["toolVtxOff"]["chip"] is True and cold["toolVtxOff"]["bar"] is True
+          and cold["toolVtxOff"]["none"] == ["on"],
+          "and its chip turns it off again, back to Compare", str(cold["toolVtxOff"]))
+
+    # ERASE IS A CONTROL, NOT A CONSEQUENCE. It was "select the Base, then click the
+    # picture", which loaded one selection with two meanings -- which layer receives paint,
+    # and whether a click paints or wipes -- and announced the second only in a sentence at
+    # the end of the strip. On the Base the chip arms itself and goes read-only, because
+    # wiping is then the only thing a click can do.
+    check(cold["eraseOnBase"] == {"checked": True, "disabled": True},
+          "with the Base selected the erase chip is on and read-only",
+          str(cold["eraseOnBase"]))
+    check(cold["eraseOnLayer"] == {"checked": False, "disabled": False},
+          "and on a layer it is the visitor's to set", str(cold["eraseOnLayer"]))
+    check("fill <b>Layer" in (cold["fillGuide"] or "")
+          and "wipe back to the base" in (cold["eraseGuide"] or ""),
+          "the strip over the picture says which of the two a mark will do",
+          repr(cold["fillGuide"]) + " / " + repr(cold["eraseGuide"]))
+    check("wiped" in (cold["eraseStatus"] or ""),
+          "and a fill with it armed goes to the base whatever is selected",
+          repr(cold["eraseStatus"]))
+
+    # THE FOCUS MAP'S STRENGTH, ON THE STRIP THAT PAINTS THE MAP. Two widgets, one number:
+    # the strip writes through the panel's own set(), so what has to hold is that the value
+    # reaches the ENGINE and that a move on the panel row shows up on the strip. A mirrored
+    # control that drifted from the row would be the page contradicting itself about what it
+    # is painting.
+    check("fov=0.6" in (cold["fovStrengthWire"] or ""),
+          "the strip's strength slider reaches the engine as foveal_strength",
+          repr(cold["fovStrengthWire"]))
+    check(cold["fovStripReadout"] == "0.25",
+          "and the panel's own row writes back to the strip", repr(cold["fovStripReadout"]))
+    check("wipe the map off" in (cold["fovEraseGuide"] or ""),
+          "and the guidance follows the brush's erase chip", repr(cold["fovEraseGuide"]))
+
+    # THE BRUSH. The fill is a wand: it asks the photograph where the passage ends, and has
+    # nothing to say about one the photograph does not delimit -- a face against a busy
+    # background, half a sky, a wall that is one gradient. Everything below the mark is
+    # shared with the fill, so these check the half that is not.
+    check(cold["brushOptsBefore"] == {"fill": False, "brush": True}
+          and cold["brushOptsAfter"]["fill"] is True
+          and cold["brushOptsAfter"]["brush"] is False
+          and cold["brushOptsAfter"]["on"] == ["on"]
+          and cold["brushOptsAfter"]["off"] == []
+          and cold["brushOptsBack"] == {"fill": False, "brush": True},
+          "Fill and Brush each show their own settings and nobody else's",
+          str([cold["brushOptsBefore"], cold["brushOptsAfter"], cold["brushOptsBack"]]))
+    check("Drag to paint" in (cold["brushGuide"] or ""),
+          "and the picture's guidance says drag, not click", repr(cold["brushGuide"]))
+    # ONE COMMIT PER STROKE. A dab is a few hundred microseconds and a render is a second;
+    # a commit inside the drag would make the brush unusable, and it is invisible from
+    # anywhere except a driven stroke.
+    check(cold["brushMidDrag"] is True,
+          "a stroke in progress does not re-render on every dab")
+    check(cold["brushRendered"] is True and "painted" in (cold["brushStatus"] or ""),
+          "and letting go commits it once", repr(cold["brushStatus"]))
+    # The equivalence invariant, reached through the brush this time: a layer seeded from
+    # the panel says exactly what the base says, so painting it changes nothing and must not
+    # cost a render. The fill has had this check since layers arrived; the brush is a second
+    # way in to the same promise, and a second way in is where a promise usually breaks.
+    check(cold["brushInertNoRender"] is True,
+          "a stroke into a layer that still agrees with the panel does not re-render")
+    check("wiped" in (cold["brushEraseStatus"] or ""),
+          "the brush honours the erase chip exactly as the fill does",
+          repr(cold["brushEraseStatus"]))
+    # THE ONE THAT IS NOT ABOUT THE UI. A canvas arc-fill antialiases its rim, which is
+    # right for the focus map (a weight field) and is the defect the whole mask pipeline is
+    # built to avoid for a LABEL field: a half-alpha rim pixel is dropped by regionBytes'
+    # `< 128` test, and a rim pixel whose colour is a blend of two legend entries is
+    # resolved by rgnNearest to whichever is nearest the average -- inventing a region 3
+    # along every boundary between 2 and 4. So the dab writes pixels, and must go on doing
+    # so; drawing a circle here would pass every other check in this file.
+    page_js = re.search(r"<script[^>]*>(.+?)</script>",
+                        open(PAGE, encoding="utf-8").read(), re.S).group(1)
+    dab = re.search(r"function rgnDab\(.*?\n\}", page_js, re.S)
+    check(bool(dab) and "put(4 * (y * W + x))" in dab.group(0)
+          and not re.search(r"\b(arc|fill)\(", dab.group(0)),
+          "the brush writes label pixels directly, never an antialiased circle",
+          "missing" if not dab else "draws instead of writing")
+
+    # SIDE BY SIDE WHILE A MASK IS PAINTED. The wipe is the instrument for judging a
+    # render, not for marking up a photograph: there the picture has to be whole and still,
+    # and a divider across the middle of it is something to work around. Four claims, and
+    # the last two are the ones that would cost something if they broke.
+    check(cold["splitOff"]["split"] is False and cold["splitOn"]["split"] is True
+          and cold["splitAfter"]["split"] is False,
+          "arming Layers puts the photograph and the painting side by side, and closing it "
+          "gives the wipe back", str([cold["splitOff"], cold["splitOn"], cold["splitAfter"]]))
+    check("+ mask" in (cold["splitOn"]["tag"] or "")
+          and "+ mask" not in (cold["splitAfter"]["tag"] or ""),
+          "and the left pane's tag says what is now on it", repr(cold["splitOn"]["tag"]))
+    # EVERY TOOL, not just the one that asked for the view. The rule is meant to be one
+    # rule -- the left pane is what you mark, the right pane is what it makes -- and a tool
+    # that kept the wipe would teach it and then break it. Driven per tool rather than
+    # reasoned about, because "which tools split" is exactly the sort of list that grows a
+    # missing entry when a fourth tool arrives.
+    every = cold["splitEveryTool"]
+    check(all(every[k]["off"] is False and every[k]["split"] is True
+              for k in ("fov", "rgn", "vtx")) and every["none"]["split"] is False,
+          "every picture tool splits the view, and putting them away restores the wipe",
+          str({k: (v.get("off"), v["split"]) for k, v in every.items()}))
+    check(every["fov"]["tag"].endswith("+ focus map")
+          and every["rgn"]["tag"].endswith("+ mask")
+          and every["vtx"]["tag"].endswith("+ swirl centres")
+          and not every["none"]["tag"].endswith("centres"),
+          "and the tag names which of them is drawn on the photograph",
+          str({k: v["tag"] for k, v in every.items()}))
+    # The divider used to move on any click that reached the wipe -- which, while a mask is
+    # being painted, is any click that misses the tool's own canvas.
+    check(cold["splitClipHeld"] is True,
+          "a click on the picture in that view does not slide a divider that is not there")
+    check("other.jpg" in (cold["splitTagAfterUpload"] or "")
+          and (cold["splitTagAfterUpload"] or "").endswith("+ mask"),
+          "loading a picture with Layers open keeps both halves of that tag",
+          repr(cold["splitTagAfterUpload"]))
+
+    # THE ONE WITH A PRICE ON IT. The painting occupies half the width in split view, so it
+    # is rendered at half the width; a view change that quietly doubled the cost of every
+    # render would look like nothing at all until a full-res picture took twice as long.
+    def _wide(ev):
+        m = re.search(r"render (\d+)x", ev or "")
+        return int(m.group(1)) if m else 0
+    check(0 < _wide(cold["splitRender"]) < _wide(cold["splitPrevRender"]),
+          "and the painting is computed for the pane, not for the whole box",
+          f'{_wide(cold["splitPrevRender"])} -> {_wide(cold["splitRender"])}')
+
+    # FULL SCREEN: A POINTER LANDS WHERE IT LOOKS LIKE IT LANDS. Reported as "the mouse
+    # click is not aligned with what is painted", and it was every tool at once: they each
+    # mapped a pointer as `(clientX - left) / width * bitmapWidth`, which assumes the bitmap
+    # fills its element box. Full screen makes the box 100vw x 100vh and letterboxes the
+    # picture inside it, so the mark landed some way from the pointer -- in exactly the mode
+    # you enter in order to place something precisely.
+    cw, ch = cold["fsCanvas"]
+    box = 1000.0
+    scale = min(box / cw, box / ch)
+    want = ((250 - (box - cw * scale) / 2) / scale / cw,
+            (400 - (box - ch * scale) / 2) / scale / ch)
+    got = (json.loads(cold["fsSetup"] or "{}").get("vortices") or {}).get("0") or []
+    check(len(got) == 1 and abs(got[0][0] - want[0]) < 1e-6
+          and abs(got[0][1] - want[1]) < 1e-6,
+          "a click in a letterboxed box lands on the pixel under the pointer",
+          f"want {want[0]:.4f},{want[1]:.4f} got {got}")
+    # The claim above is only worth making if the OLD arithmetic would have failed it: at
+    # the centre of the box both formulas agree, so a check placed there would pass either
+    # way and say nothing.
+    check(bool(got) and abs(got[0][1] - 400 / box) > 0.02,
+          "...and that is a different pixel from the one the old arithmetic chose",
+          f"{got[0][1]:.4f} vs {400 / box:.4f}" if got else "nothing placed")
+    check(cold["fsBarCount"] == "1",
+          "while a click on the black beside the picture places nothing at all",
+          repr(cold["fsBarCount"]))
 
     # THE STALE-SCHEMA RUN. Two claims, and the second is what makes the first more than
     # cosmetic: nothing anywhere may read NaN, and the tool must go on working around the

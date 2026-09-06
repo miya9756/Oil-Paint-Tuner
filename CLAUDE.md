@@ -154,16 +154,155 @@ re-apply to an already-rasterised painting, which is what lets the worker serve 
 light slider ~42x cheaper than a re-render. It lives in `pipeline.py` / `pipeline.js` now,
 file for file, rather than in the animation module it used to be re-exported from.
 
-**The toolbar is grouped by what a control is FOR**, and within that by how often a hand
-reaches for one: the two tools that mark the picture, then `full res` + **Download** (paired,
-because the toggle says what Download will write), then the painting's dice-roll and reset,
-then — past the spacer, at the far edge — `help`, `stats`, `Copy setup` and `Clear`. **The
-`Render` button is hidden while `auto` is on**, which is the default: with every change
-re-rendering there is nothing for it to do, and a button with nothing to do is worse than no
-button. Turning `auto` off brings it back, because then it is the *only* way to see a change
-— and `auto` off is not a corner case, it is what a full-res render on a large photo needs.
-`verify_page.py` drives both directions, because a page that hid it and kept it hidden is a
-tuner that cannot render.
+**The toolbar is three captioned zones, and one shape per class of control.** It was one
+flex row of a dozen controls divided by 1px hairlines, with the grouping stated only in a
+comment — so a *mode* (`auto`, `full res`, `stats`) sat in exactly the visual weight of an
+*action* (`Download`, `Re-seed`, `Clear`), which is the defect a visitor reports as "the
+checkbox and button are mixed and not sorted". Now: **TOOL** is a segmented control,
+**PAINTING** and **EXPORT** are captioned groups, a toggle is a pill with a dot and an
+action is a rectangle, and everything about the *session* — `help text`, `stats`, `Copy
+setup`, `Clear`, the status line — drops to a second, quieter row under a rule. The
+checkboxes keep their ids, their `type=checkbox` and their `.checked` semantics: the page's
+handlers, `session.js` and `index_node.mjs` all drive them that way, and only the skin
+changed.
+
+**The segmented TOOL control exists because the tools are exclusive and nothing said so.**
+Three buttons that each looked like an independent toggle, over four tools that switch each
+other off — and wiring the assertion up found that only `rgnMode` actually did it, so arming
+the focus map over an open Layers tool left **two live click-to-paint canvases on one
+surface**, the topmost eating every click while the lit button did nothing. All three mode
+functions release the others now; `if(on)` is what stops the mutual calls recursing, and
+`rgnMode(false, keep)` is the one exception — the swirl tool is itself aimed at the selected
+layer and names it in its own bar, so handing it the surface must not throw the selection
+away. The swirl chip in the bar **only ever appears while that tool is on and only ever
+turns it off**: it is armed from the Flow card, where the field it belongs to is chosen, and
+a second way to arm it here would undo that. **The `Render` button is still hidden while
+`auto` is on**, which is the default: with every change re-rendering there is nothing for it
+to do, and a button with nothing to do is worse than no button. Turning `auto` off brings it
+back, because then it is the *only* way to see a change — and `auto` off is not a corner
+case, it is what a full-res render on a large photo needs. `verify_page.py` drives both
+directions, because a page that hid it and kept it hidden is a tuner that cannot render.
+
+**A control is headed by a name, not by its identifier** — and the identifier stays under
+it. Every row used to print `c.name`: `target_n`, `tau_floor`, `aniso_max`,
+`jitter_theta_deg`, in monospace, with the prose that would rescue them `display:none` until
+the `help` toggle was on. So the tool's first impression was forty identifiers and no words.
+The names live in **`oilpaint/schema.py`'s `LABELS`**, beside the fields they name, for the
+reason `SCHEMA` lives there at all — a control surface that exists twice is one that
+disagrees with itself — and the import-time assertion now fails for a field with no label
+exactly as it already failed for a field with no control. `GROUP_NOTES` does the same job
+one level up, a line under each card heading. Three consequences:
+
+- **the identifier is never dropped**, only led. It is what `scripts/paint.py` takes, what
+  `Copy setup` writes and what a saved session stores, so hiding it would buy a tidier row
+  with the path from the page to the command line.
+- **the front cards carry a lead line whether `help text` is on or not** — the first
+  sentence of the help, which is the line that stops a slider being anonymous. Advanced does
+  not: forty rows of the same treatment is a wall of prose rather than a panel.
+- **a lead that only restates the label is dropped**, and the next sentence used. Several
+  help texts open by naming the control (`target_n` is "Stroke budget. A CEILING, not a
+  quota…"), which was fine while the row was headed `target_n`. `verify_page.py` pins the
+  rule at the same bound the page applies, so a sentence that opens with the name and then
+  goes on to explain — `broken_color`'s, the most useful line on that card — is not a defect.
+
+**Erasing is a control, not a consequence of the selection.** It was "select the Base, then
+click the picture", which loaded one selection with two meanings — which layer receives
+paint, *and* whether a click paints or wipes — and announced the second only in a sentence
+at the end of a strip. That is most of what made the layers flow feel rough. There is an
+`erase` chip now; on the Base it arms itself and goes **read-only**, because wiping is then
+the only thing a click can do, and `rgnEraseWanted` is what keeps that forced tick from
+being remembered as a choice. The three tool strips also share one grammar, left to right —
+*name · what the click does · how it does it · show · clear · hint* — because a visitor
+learns an interaction once or three times, and three was the answer here.
+
+**A pointer lands where it looks like it lands, full screen included.** Every tool mapped a
+pointer as `(clientX - r.left) / r.width * c.width`, which says the bitmap fills its element
+box. In the window it does. In full screen the box becomes 100vw x 100vh and the picture is
+letterboxed inside it by `object-fit`, so a mark appeared some way from the pointer — in all
+three tools at once, and only in the mode you enter *in order to place something precisely*.
+`maskPoint` inverts the `contain` fit instead (that scale, that centring offset), and the
+canvases now declare `object-fit:contain` in **both** modes — a no-op in the window, and
+what makes the inversion one formula rather than a computed-style query per pointermove.
+`maskHit` is the other half: the black beside the picture used to be clamped to the nearest
+edge pixel and quietly acted on, and is now not a place a mark can be made. `verify_page.py`
+builds a letterbox the shim would never produce (a square box around a wide picture) and
+pins the landing point *and* the fact that the old arithmetic would have chosen a different
+one — at the centre of the box both formulas agree, so a check placed there would pass
+either way and say nothing.
+
+**A layer can be filled or brushed**, and the choice is a segmented pair in the strip.
+The fill is a wand — it asks the *photograph* where the passage ends — and a wand has
+nothing to say about a passage the photograph does not delimit: a face against a busy
+background, half a sky, the shaded side of a wall that is one continuous gradient. Two
+things about it:
+
+- **everything below the mark is shared.** `rgnTargetNow` (the erase chip beating the
+  selection), `rgnPutter` (the per-pixel write, and the `st.live` flag that answers *can
+  this have changed the painting* — which is not the same question as *is the target layer
+  live*, because a mark also TAKES pixels), and `rgnCommit` (scan, save, rebuild, maybe
+  render). The brush is a different way of choosing pixels, not a second mask editor.
+- **the dab is HARD-EDGED, and writes pixels rather than drawing a circle.** This is the
+  one constraint that is forced rather than chosen. `ctx.arc().fill()` antialiases its rim,
+  which is exactly right for the focus map — a *weight* field — and is the defect the whole
+  mask pipeline is built to avoid for a *label* field: a half-alpha rim pixel is dropped by
+  `regionBytes`' `< 128` test, and a rim pixel whose colour is a blend of two legend entries
+  is resolved by `rgnNearest` to whichever is nearest the average — which invents a region 3
+  along every boundary between 2 and 4. It is the NEAREST-resample argument one step
+  earlier. `verify_page.py` reads `rgnDab` and fails if it ever starts drawing, because
+  every other check in the file would pass a circle.
+
+The stroke takes the pixel buffer **once** at `pointerdown` and writes back a dirty
+rectangle per move — a full `getImageData`/`putImageData` pair at pointer rate is megabytes
+of copying — and commits **once per stroke, not per dab**: a dab is a few hundred
+microseconds and a render is a second. `pointercancel` commits too, or a stroke the browser
+abandons leaves paint the engine was never told about.
+
+**Arming any picture tool replaces the wipe with a side-by-side view** — the photograph and
+whatever you are drawing on it on the left, the painting on the right. The wipe answers *how does the painting differ from
+the photograph*, which is the question you ask of a render and not the one you ask while
+marking up a passage: there the photograph has to be whole and still, and a divider across
+the middle of it is something to work around — it moves on any click that reaches `#wipe`,
+which is any click that misses the tool's own canvas. Four things about `wipeSplit`:
+
+- **no second copy of anything.** The same `#src`, `#top` and mask canvases, laid out
+  differently: `#src` drops to `width:50%`, which halves the box height with it (it is the
+  one child in normal flow), so each pane comes out exactly image-shaped; `#top` moves to
+  the other half and stops being clipped. A duplicate `<img>` would be a second thing to
+  keep in step with the render and would give the mask canvases two possible parents.
+- **`clip-path:none!important`**, and it is the same trap the full-screen block documents:
+  the wipe writes `top.style.clipPath` inline on every drag, and inline beats a stylesheet
+  rule but not an `!important` one. Without it the painting keeps whatever clip the divider
+  was last left at, in a view that has no divider.
+- **the render follows the PANE, not the box.** `renderWidth` and `sizeWipe` both divide by
+  `paneScale()`. Missing that is the version of this change with a price on it: half the
+  width on screen and a full-width render is double the cost of every render for no visible
+  pixel, and it would look like nothing at all until a full-res picture took twice as long.
+- **every tool turns it on, and the decision lives in `toolState`** — the one place that
+  already knows what is armed, so there is no list of "tools that split" to grow a missing
+  entry when a fourth arrives. It shipped on Layers alone first, on the argument that the
+  swirl markers are a property of the *painting* and so belong on that side. That was the
+  wrong cut: every tool here puts a canvas on one surface and asks for clicks on it, so the
+  rule should be **one** rule — *the left pane is what you mark, the right pane is what it
+  makes* — and splitting for one tool while wiping for the other two teaches that rule and
+  then breaks it. A vortex is a composition point and reads on the photograph at least as
+  well as on the painting, which is what made the original argument only half right.
+  `verify_page.py` drives all three rather than reasoning about them.
+
+**The left tag has one writer** (`tagSource`). It gained a second author when the split view
+started appending `+ mask` to what the upload had written, and two authors appending to
+whatever they find in a string is how a tag ends up with the suffix twice or with the file
+name gone — which is exactly what loading a picture with Layers open did. The file name
+lives on the element and the tag is composed from it, with the suffix coming from
+`overlayName()` — `mask`, `focus map` or `swirl centres`, read off the bars like everything
+else about which tool is armed.
+
+**The next step is said ON the picture** (`#guide`). It used to land in `#status`, at the
+far end of the toolbar and some 800px from the thing it was asking you to click.
+`pointer-events:none` is load-bearing: every tool under it is click-to-paint, and a banner
+that ate the first click would be worse than no banner. The focus map's one knob,
+`foveal_strength`, is **mirrored into its own strip** and writes through the panel's `set()`
+— two widgets, one number — so painting a map and deciding how much it counts stopped being
+in two different places.
 
 **The stats strip is off by default** (the `stats` toggle in the toolbar). The numbers —
 strokes, coverage, psnr, tau — are for judging a *change*, and the page is for looking at a
@@ -288,7 +427,7 @@ front end re-aim the transport without the stroke buffer; nothing reads them now
 all three act on the WHOLE picture, which is the one thing a painter never does. It divides
 the picture into **passages** and paints each one on its own — `--regions MASK.png` plus
 `--region 1:palette=zorn,hue_rotate=25` or `--region 1:flow=starry,flow_coh=-0.2`, or the
-tuner's **Layers** tool: `+ Layer`, click to flood-fill it, and the Palette and Flow rows
+tuner's **Layers** tool: `+ New layer`, click to flood-fill it, and the Palette and Flow rows
 then write to the selected layer instead of to the whole picture. (The page says *layers*
 and the engine says *regions*, deliberately — a visitor's word for "a thing I select and
 edit separately" against what this actually is, a label per stroke. `--regions` and

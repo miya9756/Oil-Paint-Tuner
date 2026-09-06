@@ -27,14 +27,20 @@ from .tensor import flat_tensor, structure_tensor
 class PaintConfig:
     # allocation
     metric: str = "var"
-    target_n: int = 5000
+    target_n: int = 20000
     tau: float = None  # set directly to bypass the budget search
     # Largest and smallest stroke, in PIXELS. These were depths in the first draft, which
     # was a mistake: a depth is relative to the padded tree size, so `dmin=2` silently
     # meant 256px strokes on a 1024 tree and flat regions came out as huge blobs. Pixels
     # are what the look actually depends on, so pixels are what the config exposes.
     max_cell: int = 64
-    min_cell: int = 8  # below ~8px a stroke is too small to read AS a stroke
+    # 5, not the 8 this started at. The old number came with the claim that a stroke below
+    # ~8px stops reading AS a stroke, which is true of a stroke you are meant to SEE and is
+    # the wrong bound for the smallest one in the picture: the fine end of the range is
+    # where an eye, a hand or a roof edge gets its definition, and at 8px the tree could not
+    # buy it however much budget it had. The claim survives as advice in the schema's help
+    # rather than as a floor in the code.
+    min_cell: int = 5
     base_block: int = 16
     # Absolute detail floor -- the budget cannot buy subdivision below it. 1e-4 is a luma
     # VARIANCE, i.e. std 0.01 (~2.5/255): under that a cell is compression noise, not

@@ -8,6 +8,12 @@ is a control surface that disagrees with itself.
 The assertion at the bottom is the point of the file: importing it fails loudly when
 `PaintConfig` gains a field and this list does not. The failure it prevents is a parameter
 that silently cannot be tuned because nobody noticed it was missing from the panel.
+
+`LABELS` and `GROUP_NOTES` are the same file doing the same job for the WORDS -- the name a
+person reads on a control, and the line under each card heading. They are here rather than
+in a front end because a control described twice is a control described differently, and
+they are guarded by the same kind of assertion: a field arriving without a human name fails
+the import exactly as one arriving without a control does.
 """
 
 from dataclasses import fields
@@ -27,7 +33,10 @@ SCHEMA = [
     ("Allocation", "max_cell", "int", 8, 256, 4,
      "Largest stroke, in pixels."),
     ("Allocation", "min_cell", "int", 2, 64, 1,
-     "Smallest stroke. Below ~8px a stroke stops reading as a stroke."),
+     "Smallest stroke. This is the fine end of the range -- where an eye, a hand or a roof "
+     "edge gets its definition -- so it is a floor on what the budget may buy, not a size "
+     "the picture is made of. Much below ~5px a mark stops reading as a stroke at all and "
+     "starts reading as grain."),
     ("Allocation", "tau_floor", "float", 0.0, 0.002, 0.00002,
      "Absolute detail floor the budget cannot buy past. Stops the tree subdividing "
      "JPEG noise in flat regions. Calibrated for metric='var'."),
@@ -261,12 +270,125 @@ SCHEMA = [
      "Which way the eye leans, as a screen compass. Inert at view_elev_deg = 90."),
 ]
 
+# ---------------------------------------------------------------------------------------
+# The HUMAN NAME of each control, and its unit.
+#
+# The field name is the contract -- it is what `scripts/paint.py` takes, what `Copy setup`
+# writes and what a saved session stores -- so it is never replaced, only led. Both front
+# ends show the label first and the field name under it in small type, which is what lets
+# someone who found a look on the page reproduce it from the command line without guessing.
+#
+# It lives HERE, beside SCHEMA, for the reason SCHEMA lives here: a control surface that
+# exists twice is a control surface that disagrees with itself. The assertion below is the
+# whole point of the dict -- a new PaintConfig field fails the import until it has a name a
+# person can read, exactly as it already fails until it has a control.
+#
+# Style, and it is a rule rather than a taste: the label says WHAT MOVES, in the words
+# someone looking at a painting would use, and never restates the field name in spaces
+# ("tau_floor" -> "Detail floor", not "Tau floor"). A unit is written only where the number
+# means nothing without one.
+LABELS = {
+    # group, field: (label, unit)
+    "metric":            ("Where detail goes", ""),
+    "target_n":          ("Stroke budget", ""),
+    "max_cell":          ("Largest stroke", "px"),
+    "min_cell":          ("Smallest stroke", "px"),
+    "tau_floor":         ("Detail floor", ""),
+    "foveal_strength":   ("Follow the focus map", ""),
+
+    "palette":           ("Palette", ""),
+    "palette_strength":  ("Palette strength", ""),
+    "warm_cool":         ("Warm–cool split", ""),
+    "chroma":            ("Colour intensity", ""),
+    "value_compress":    ("Tonal range squeeze", ""),
+    "pigment":           ("Mix from real tubes", ""),
+    "broken_color":      ("Broken colour", ""),
+    "reference":         ("Match a painting", ""),
+    "reference_strength": ("Match strength", ""),
+    "hue_target":        ("Hue band centre", "°"),
+    "hue_range":         ("Hue band width", "°"),
+    "hue_rotate":        ("Turn those hues", "°"),
+    "hue_boost":         ("Intensify those hues", ""),
+
+    "flow":              ("Flow field", ""),
+    "flow_strength":     ("Flow strength", ""),
+    "flow_coh":          ("Ribbons vs dabs", ""),
+    "flow_scale":        ("Feature size", ""),
+    "flow_rot":          ("Field rotation", "°"),
+    "flow_drift":        ("Slide along the flow", ""),
+
+    "kappa":             ("Stroke size vs cell", ""),
+    "orient":            ("Stroke angle from", ""),
+    "aniso_max":         ("Longest elongation", "×"),
+    "tensor_sigma":      ("Direction smoothing", "px"),
+    "flat_dir":          ("Flat-area brush", ""),
+    "flat_sigma":        ("Flat-area scale", "px"),
+    "flat_theta_deg":    ("Flat-area sweep", "°"),
+    "jitter_centre":     ("Position jitter", ""),
+    "jitter_theta_deg":  ("Angle jitter", "°"),
+    "jitter_radius":     ("Size jitter", ""),
+    "jitter_aniso":      ("Elongation jitter", ""),
+
+    "size_sigma":        ("Stroke size spread", ""),
+    "wobble_amp":        ("Ragged outline", ""),
+    "color_jitter":      ("Colour variation", ""),
+    "drop_p":            ("Random dropout", ""),
+    "bristle_amp":       ("Bristle grooves", ""),
+    "fringe_px":         ("Edge crumble", "px"),
+    "taper_amp":         ("Taper to one end", ""),
+    "seed":              ("Random seed", ""),
+
+    "base":              ("Ground under the strokes", ""),
+    "base_cell_scale":   ("Underpainting stroke size", "×"),
+    "base_block":        ("Ground block size", "px"),
+    "hard":              ("Hard-edged strokes", ""),
+    "hard_r":            ("Hard-edge cutoff", "σ"),
+    "alpha":             ("Stroke opacity", ""),
+    "color":             ("Cell colour rule", ""),
+    "linear":            ("Blend in linear light", ""),
+
+    "impasto":           ("Thick paint", ""),
+    "impasto_layer":     ("Paint build-up", ""),
+    "impasto_relief":    ("Groove depth", ""),
+    "canvas_weave":      ("Canvas tooth", ""),
+    "impasto_depth":     ("Paint thickness", ""),
+    "light_deg":         ("Light direction", "°"),
+    "light_elev_deg":    ("Light height", "°"),
+    "gloss":             ("Gloss", ""),
+    "occlusion":         ("Crease shadow", ""),
+    "view_elev_deg":     ("Viewing angle", "°"),
+    "view_deg":          ("Viewing direction", "°"),
+}
+
+# One line under each card heading, in the same register as the labels. A group name is a
+# filing decision -- it says which drawer a control is in, not what the drawer is for -- and
+# seven of them in a row is the point at which a panel stops being self-explanatory.
+GROUP_NOTES = {
+    "Allocation":   "Where the strokes go, and how many.",
+    "Palette":      "Which tubes the paint is mixed from, and how the mixture is graded.",
+    "Flow":         "Which way the marks run, whatever the photograph is of.",
+    "Geometry":     "The size, angle and elongation of a single mark.",
+    "Irregularity": "What stops every stroke looking like the last one.",
+    "Paint":        "How the paint is laid down and blended.",
+    "Impasto":      "Paint with thickness, lit from a direction you choose.",
+}
+
 _SCHEMA_FIELDS = {row[1] for row in SCHEMA}
 _CFG_FIELDS = {f.name for f in fields(PaintConfig)} - {"tau"}  # tau is bypassed by target_n
 _MISSING = _CFG_FIELDS - _SCHEMA_FIELDS
 _EXTRA = _SCHEMA_FIELDS - _CFG_FIELDS
 assert not _MISSING, f"PaintConfig fields with no control: {sorted(_MISSING)}"
 assert not _EXTRA, f"controls with no PaintConfig field: {sorted(_EXTRA)}"
+
+# The same guard, for the same failure one step further on: a control nobody can read is
+# only marginally better than a control nobody has. A field arriving without a label would
+# otherwise fall back to its own name on the panel and nothing would ever say so.
+_UNNAMED = _SCHEMA_FIELDS - set(LABELS)
+_STRAY = set(LABELS) - _SCHEMA_FIELDS
+assert not _UNNAMED, f"controls with no human label: {sorted(_UNNAMED)}"
+assert not _STRAY, f"labels for controls that do not exist: {sorted(_STRAY)}"
+_NOTELESS = {row[0] for row in SCHEMA} - set(GROUP_NOTES)
+assert not _NOTELESS, f"control groups with no note: {sorted(_NOTELESS)}"
 
 
 def defaults():
@@ -279,8 +401,10 @@ def as_dict():
     """The payload the control panel is built from, server or browser."""
     return {
         "schema": [
-            {"group": g, "name": n, "kind": k, "min": lo, "max": hi, "step": st, "help": hp}
+            {"group": g, "name": n, "kind": k, "min": lo, "max": hi, "step": st, "help": hp,
+             "label": LABELS[n][0], "unit": LABELS[n][1]}
             for (g, n, k, lo, hi, st, hp) in SCHEMA
         ],
         "defaults": defaults(),
+        "groupNotes": GROUP_NOTES,
     }

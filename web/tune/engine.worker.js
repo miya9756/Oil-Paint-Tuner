@@ -451,8 +451,12 @@ async function handleInit(id) {
   // only for a swirl-kind preset, and the page must not be the place that decides which
   // those are. `maxVortices` too -- the cap is the engine's, so the page enforces the
   // engine's number rather than a copy of it that could drift.
+  // `groupNotes` rides along with the schema for the same reason the row labels sit inside
+  // it: the words a control is described with are the ENGINE's, out of oilpaint/schema.py,
+  // so the page and the CLI cannot end up describing the same knob differently.
   self.postMessage({ id, type: 'ready', schema: schema.schema,
-                     defaults: schema.defaults, pigments: PIGMENTS,
+                     defaults: schema.defaults, groupNotes: schema.groupNotes,
+                     pigments: PIGMENTS,
                      flowKinds: FLOW_KINDS, maxVortices: MAX_VORTICES,
                      maxRegions: MAX_REGIONS, regionLegend: REGION_LEGEND,
                      regionParams: [...REGION_PARAMS].sort() });

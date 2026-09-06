@@ -140,8 +140,12 @@ globalThis.getComputedStyle = () => ({ fontFamily: 'serif' });
 // accessor on globalThis (18+), so a plain assignment throws TypeError at module scope and
 // takes the whole harness down before a single check runs -- which reads as "the page script
 // does not run at all" and says nothing about the page.
+// The clipboard REMEMBERS. `Copy setup` is the page's own record of what is on screen, and
+// it carries the placed swirl centres as fractions -- which makes it the only way to read
+// back WHERE a click landed, as opposed to that one did.
+let lastCopy = '';
 Object.defineProperty(globalThis, 'navigator', {
-  value: { clipboard: { writeText: async () => {} } },
+  value: { clipboard: { writeText: async t => { lastCopy = t; } } },
   configurable: true, writable: true,
 });
 globalThis.localStorage = {
@@ -221,7 +225,8 @@ globalThis.Worker = class {
         defaults = Object.fromEntries(
           Object.entries(defaults).filter(([k]) => !drop(k)));
       }
-      reply({ id: msg.id, type: 'ready', schema, defaults, pigments: {},
+      reply({ id: msg.id, type: 'ready', schema, defaults,
+              groupNotes: job.schema.groupNotes, pigments: {},
               flowKinds: job.flowKinds, maxVortices: job.maxVortices,
               maxRegions: job.maxRegions, regionLegend: job.regionLegend,
               regionParams: job.regionParams });
@@ -246,7 +251,10 @@ globalThis.Worker = class {
       // Per OWNER, not a total: the whole claim of the per-layer swirls is that a point
       // lands in the set the selection names, and a count alone cannot tell "2 for the
       // picture" from "2 for Region 1" -- which is the one thing that can go wrong.
+      // `fov` is appended rather than inserted: every check above matches this line by
+      // substring, and a field in the middle would rewrite what those matches mean.
       out.events.push(`render ${msg.w}x${msg.h} flow=${msg.params.flow}`
+        + ` fov=${msg.params.foveal_strength}`
         + (msg.vortices ? ` v=${vtxTally(msg.vortices)}` : '')
         + (msg.regionLabels ? ` r=${Object.keys(msg.regionOverrides || {}).sort()}`
                             + `/${msg.regionKey}` : ''));
@@ -326,6 +334,16 @@ const cardList = host => host._kids.map(c => ({
   tools: c._kids.map(r => r._id).filter(x => x && x !== 'created') }));
 out.frontCards = cardList($('#cards'));
 out.advCards = cardList($('#advCards'));
+// THE ROW MARKUP ITSELF. Every row used to be printed as its Python identifier; the label
+// now leads and the identifier follows it, and the second half is the one worth pinning --
+// `target_n` is what scripts/paint.py takes and what `Copy setup` writes, so a redesign
+// that tidied it away would cut the path from the page to the command line.
+const allCards = $('#cards')._kids.concat($('#advCards')._kids);
+out.rowMarkup = {};
+for (const c of allCards) {
+  for (const r of c._kids) if (r.dataset.name) out.rowMarkup[r.dataset.name] = r.innerHTML;
+}
+out.cardNotes = allCards.map(c => (c.innerHTML.match(/<p class="csub">(.*?)<\/p>/) || [])[1]);
 
 // 4b. THE REGION LAYERS. The model is "the panel edits the selection", and its only real
 //     failure mode is a row writing to the wrong place -- which, from outside, looks exactly
@@ -519,6 +537,214 @@ lyrRow(1).fire('click', {});
 lyrRow(1)._kids[4].fire('click', {});      // the ×
 await settle(900);
 out.rgnAfterDelete = ($('#rgnLayers')._kids || []).map(r => r.dataset.id);
+
+// 5. THE TOOLBAR'S TOOL STATE. The three picture tools are mutually exclusive in the code,
+//    and the segmented control is the page ASSERTING that -- so the assertion has to be
+//    driven. It is not cosmetic: wiring it up found that only rgnMode released the others,
+//    so arming the focus map over an open Layers tool left two live click-to-paint canvases
+//    on one surface, the topmost ate every click, and the tool whose button was lit did
+//    nothing at all.
+const cls = sel => [...$(sel).classList._s];
+$('#toolNone').fire('click', {});
+out.toolIdle = { none: cls('#toolNone'), fov: cls('#fovBtn'), rgn: cls('#rgnBtn'),
+                 guideHidden: $('#guide').hidden };
+$('#fovBtn').fire('click', {});
+out.toolFov = { none: cls('#toolNone'), fov: cls('#fovBtn'),
+                guide: $('#guide').innerHTML, guideHidden: $('#guide').hidden };
+// ARMING ONE RELEASES THE OTHER, read off the bar rather than off the button: a chip that
+// looked right over a canvas that was still live is exactly the bug this pins.
+$('#rgnBtn').fire('click', {});
+out.toolRgn = { fov: cls('#fovBtn'), rgn: cls('#rgnBtn'), fovBar: $('#fovBar').hidden,
+                guide: $('#guide').innerHTML };
+// The swirl chip APPEARS while that tool is on and only ever turns it off -- it is armed
+// from the Flow card, and a second way to arm it here would undo the reason it lives there.
+$('#vtxBtn').fire('click', {});
+out.toolVtxShown = !$('#toolVtx').hidden;
+out.toolVtxRgnBar = $('#rgnBar').hidden;
+$('#toolVtx').fire('click', {});
+out.toolVtxOff = { chip: $('#toolVtx').hidden, bar: $('#vtxBar').hidden,
+                   none: cls('#toolNone') };
+
+// 5b. ERASE IS A CONTROL NOW. It was "select the Base, then click", which loaded one
+//     selection with two meanings and announced the second only in prose. On the Base the
+//     chip arms itself and goes read-only, because wiping is then the only thing a click
+//     can do; on a layer it is the visitor's to set, and a fill with it on must go to
+//     region 0 whatever is selected.
+if ($('#rgnBar').hidden) $('#rgnBtn').fire('click', {});
+const anyLayer = ($('#rgnLayers')._kids || []).map(r => r.dataset.id).find(x => x !== '0');
+lyrRow(0).fire('click', {});
+out.eraseOnBase = { checked: $('#rgnErase').checked, disabled: $('#rgnErase').disabled };
+lyrRow(Number(anyLayer)).fire('click', {});
+out.eraseOnLayer = { checked: $('#rgnErase').checked, disabled: $('#rgnErase').disabled };
+out.fillGuide = $('#guide').innerHTML;
+$('#rgnErase').checked = true; $('#rgnErase').fire('change', {});
+out.eraseGuide = $('#guide').innerHTML;
+rgnCanvas.fire('pointerdown', { clientX: 210, clientY: 110 });
+await settle(120);
+out.eraseStatus = $('#status').textContent;
+
+// 5c. THE FOCUS MAP'S STRENGTH, IN THE STRIP THAT PAINTS THE MAP. Two widgets, one number:
+//     the strip writes through the panel's own `set()`, so what has to be proven is that
+//     the value reaches the ENGINE, and that a move on the panel row shows in the strip.
+$('#fovBtn').fire('click', {});
+$('#fovStrength').fire('input', { target: { value: '0.6' } });
+await settle(900);
+out.fovStrengthWire = renders().pop() || '';
+$('#ctl-foveal_strength').fire('input', { target: { value: '0.25' } });
+await settle(50);
+out.fovStripReadout = $('#fovStrengthV').textContent;
+// The strip's own erase chip changes what the picture's guidance says, because that is the
+// question a hand asks before any of the settings matter.
+$('#fovErase').checked = true; $('#fovErase').fire('change', {});
+out.fovEraseGuide = $('#guide').innerHTML;
+
+// 5d. SIDE BY SIDE WHILE A MASK IS PAINTED. The wipe answers "how does the painting differ
+//     from the photograph", which is not the question you ask while marking up a passage --
+//     there the photograph has to be whole and still, and the divider moves whenever a click
+//     lands on it. So Layers splits the box; the tag, the divider and the render width all
+//     have to follow, and the last of those is the one that costs money if it does not.
+$('#toolNone').fire('click', {});
+const clipBefore = $('#top').style.clipPath;
+const isSplit = () => [...$('#wipe').classList._s].includes('split');
+out.splitOff = { split: isSplit(), tag: $('#tagL').textContent };
+// A render taken with NO tool armed. Every tool splits the box now, so the last render in
+// the log was very likely a split one already -- and comparing a split render against a
+// split render would say nothing while looking like it said something.
+moveRow('target_n', 8000);
+await settle(900);
+const beforeSplitRender = renders().pop() || '';
+$('#rgnBtn').fire('click', {});
+out.splitOn = { split: isSplit(), tag: $('#tagL').textContent };
+// THE DIVIDER STANDS DOWN. A click on the photograph outside a tool's own canvas is exactly
+// what used to slide a bar across the thing being marked up.
+$('#wipe').fire('pointerdown', { clientX: 400, pointerId: 1 });
+out.splitClipHeld = $('#top').style.clipPath === clipBefore;
+// ...and the painting is computed for the PANE. Half the width on screen must not mean a
+// full-width render: that is double the cost of every render for no visible pixel.
+moveRow('target_n', 9000);
+await settle(900);
+out.splitRender = renders().pop() || '';
+out.splitPrevRender = beforeSplitRender;
+// ONE WRITER FOR THE TAG. The upload names the file and the split view says what is drawn
+// over it, and two authors appending to whatever they find there is how a tag ends up with
+// the suffix twice, or with the file name gone. Loading a picture with Layers open is the
+// case that showed it.
+$('#file').fire('change',
+  { target: { files: [new File([], 'other.jpg', { type: 'image/jpeg' })] } });
+await settle(320);
+out.splitTagAfterUpload = $('#tagL').textContent;
+$('#rgnBtn').fire('click', {});
+out.splitAfter = { split: isSplit(), tag: $('#tagL').textContent };
+
+// EVERY TOOL, NOT JUST LAYERS. The rule a visitor should have to learn is one rule -- the
+// left pane is what you mark, the right pane is what it makes -- so a tool that kept the
+// wipe would teach that rule and then break it. The tag names what is on the left pane,
+// which is the only part of the view that differs between the three.
+const armed = {};
+for (const [name, btn] of [['fov', '#fovBtn'], ['rgn', '#rgnBtn'], ['vtx', '#vtxBtn']]) {
+  $('#toolNone').fire('click', {});
+  const off = isSplit();
+  $(btn).fire('click', {});
+  armed[name] = { off, split: isSplit(), tag: $('#tagL').textContent };
+}
+$('#toolNone').fire('click', {});
+armed.none = { split: isSplit(), tag: $('#tagL').textContent };
+out.splitEveryTool = armed;
+
+// 5e. THE BRUSH. The fill asks the photograph where a passage ends, which is no question at
+//     all for a face against a busy background or half a sky, so a layer can also be painted
+//     by hand. Everything below the mark is shared with the fill -- the target, the erase
+//     chip, the per-pixel writer, the commit -- so what is driven here is the half that is
+//     not: the mode switch, the stroke lifecycle, and one commit per stroke rather than one
+//     per dab.
+$('#rgnBtn').fire('click', {});
+// A layer of its own rather than whichever one survived the blocks above: 5d reloads the
+// picture, and a drive that depends on what a previous drive left behind is a drive that
+// fails for a reason unrelated to what it is testing.
+$('#rgnAdd').fire('click', {});
+$('#rgnErase').checked = false; $('#rgnErase').fire('change', {});
+out.brushOptsBefore = { fill: $('#rgnFillOpts').hidden, brush: $('#rgnBrushOpts').hidden };
+$('#rgnModeBrush').fire('click', {});
+out.brushOptsAfter = { fill: $('#rgnFillOpts').hidden, brush: $('#rgnBrushOpts').hidden,
+                       on: [...$('#rgnModeBrush').classList._s],
+                       off: [...$('#rgnModeFill').classList._s] };
+out.brushGuide = $('#guide').innerHTML;
+// A STROKE, not a click: down, two moves, up. The count in the status line is the whole
+// stroke's, which is what says the dabs accumulated into one edit rather than replacing
+// each other.
+const stroke = (id, pts) => {
+  rgnCanvas.fire('pointerdown', { clientX: pts[0][0], clientY: pts[0][1], pointerId: id });
+  for (const [x, y] of pts.slice(1))
+    rgnCanvas.fire('pointermove', { clientX: x, clientY: y, pointerId: id });
+  return () => rgnCanvas.fire('pointerup',
+    { clientX: pts[pts.length - 1][0], clientY: pts[pts.length - 1][1], pointerId: id });
+};
+// FIRST, ON A LAYER THAT IS STILL INERT. A new layer is seeded from the panel, so until one
+// of its rows moves it grades exactly what the base does -- provably, by the equivalence
+// invariant of oilpaint/regions.py -- and painting it must not re-render. The fill has this
+// check already; the brush is a second way in to the same promise.
+const beforeInert = renders().length;
+stroke(2, [[120, 80], [180, 100], [240, 130]])();
+await settle(900);
+out.brushInertNoRender = renders().length === beforeInert;
+
+// NOW WITH THE LAYER LIVE. Moving one of its rows makes it disagree with the panel, which
+// is what "live" means, and a stroke must then reach the engine.
+moveRow('warm_cool', 0.22);
+await settle(900);
+const beforeBrush = renders().length;
+const release = stroke(3, [[300, 150], [340, 170], [380, 200]]);
+// ONE COMMIT PER STROKE. A dab is microseconds and a render is a second, so a mid-drag
+// commit would make the brush unusable -- and it would be invisible from anywhere but here.
+out.brushMidDrag = renders().length === beforeBrush;
+release();
+// READ BEFORE THE RENDER OVERWRITES IT. rgnCommit sets the status synchronously and then
+// schedules; the render's own "draft - refining..." lands on the same line a moment later,
+// so waiting first reads the wrong sentence and fails for a reason unrelated to the brush.
+out.brushStatus = $('#status').textContent;
+await settle(900);
+out.brushRendered = renders().length > beforeBrush;
+// The same brush with the erase chip on goes to the base, exactly as the fill does.
+$('#rgnErase').checked = true; $('#rgnErase').fire('change', {});
+stroke(4, [[150, 90], [170, 110]])();
+out.brushEraseStatus = $('#status').textContent;      // synchronous, as above
+await settle(400);
+$('#rgnModeFill').fire('click', {});
+out.brushOptsBack = { fill: $('#rgnFillOpts').hidden, brush: $('#rgnBrushOpts').hidden };
+$('#rgnBtn').fire('click', {});
+
+// 5f. FULL SCREEN: A POINTER LANDS WHERE IT LOOKS LIKE IT LANDS.
+//     Every tool used to map a pointer as `(clientX - left) / width * bitmapWidth`, which
+//     says the bitmap fills its element box. In the window it does; in full screen the box
+//     is 100vw x 100vh and the picture is LETTERBOXED inside it, so the mark appeared some
+//     way from the pointer -- in all three tools, and only in the mode you enter to place
+//     something precisely. The shim's rect is the same for every element, so the letterbox
+//     is made here rather than waited for: a square box around a wide picture is the case
+//     that separates the two formulas.
+$('#toolNone').fire('click', {});
+pickRow('flow', 'starry');
+await settle(900);
+$('#vtxBtn').fire('click', {});
+$('#vtxClear').fire('click', {});
+await settle(600);
+const vc = $('#vtxCanvas');
+out.fsCanvas = [vc.width, vc.height];
+vc.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 1000 });
+const vClick = (x, y, id) => {
+  vc.fire('pointerdown', { clientX: x, clientY: y, pointerId: id });
+  vc.fire('pointerup', { clientX: x, clientY: y, pointerId: id });
+};
+vClick(250, 400, 7);
+await settle(900);
+$('#setupBtn').fire('click', {});
+await settle(120);
+out.fsSetup = lastCopy;
+// ...and the black beside the picture is not somewhere a mark can be made. It used to be
+// clamped to the nearest edge pixel and quietly acted on.
+vClick(250, 100, 8);
+await settle(600);
+out.fsBarCount = $('#vtxCount').textContent;
+$('#vtxBtn').fire('click', {});
 
 // 6. The page must have armed its own error reporting, whatever else happened.
 out.reportsErrors = (globalThis.window._h.error || []).length > 0
