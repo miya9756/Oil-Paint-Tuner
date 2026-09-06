@@ -93,6 +93,12 @@ conda run -n 4dre python scripts/paint.py IN.jpg OUT.png --flow starry --regions
     --vortices "0.30,0.11 0.63,0.12" --region "1:flow=starry" \
     --region-vortices "1:0.24,0.71 0.61,0.88"
 
+# the WHOLE setup as one file -- every field, the layers, the swirl centres and both
+# masks. This is what the tuner's "Save project" writes and what a dropped .json opens,
+# so a painting moves between the browser and the CLI without being retyped. Any flag
+# still wins over the file.
+conda run -n 4dre python scripts/paint.py IN.jpg OUT.png     --project examples/two-passages.oilpaint.json --target-n 12000
+
 # how much each Palette / Flow trim moves the picture, as a number. This is what decided
 # which rows sit on the tuner's front cards and which fold into Advanced (FINE in index.html)
 conda run -n 4dre python scripts/knob_impact.py
@@ -532,6 +538,37 @@ it is seven things to keep in step with the engine. Three consequences worth kno
 the render message the engine received — because the model's only real failure mode is a row
 writing to the wrong place, and from outside that looks exactly like a row that works.
 
+
+`oilpaint/project.py` is the answer to a question none of the above could answer on its
+own: **what is "this painting", as a thing you can send someone?** A finished setup here is
+five things -- the `PaintConfig` fields, the per-region overrides, the swirl centres, the
+region mask and the foveal map -- and they lived in five places, so reproducing somebody's
+result meant collecting all of them by hand. A project is one JSON document carrying all
+five, defined ONCE in Python and written and read by both front ends: `--project FILE` on
+the CLI, **Save project** / a dropped `.json` on the page. Four things worth knowing:
+
+- **the photograph is deliberately not in it.** A project is a recipe, not the ingredients:
+  a phone photo is 5-8 MB and 8-11 MB of base64, which is not a thing to commit beside code.
+  Only its NAME is recorded. The useful consequence is that running one project over a
+  different photograph is a sensible thing to do, and is most of why the format earns its
+  place.
+- **a mask is either embedded or referenced, and both are first-class.** A `data:` URL makes
+  the file self-contained, which is what an example in a repo has to be -- and it keeps the
+  setup out of LFS, since `.gitattributes` sends every `*.png` there and a `.json` stays
+  diffable on GitHub. A relative path (`"regions": "sky-mask.png"`) makes the mask an
+  ordinary PNG a person can paint in an image editor, which is a far better tool for a
+  complicated boundary than the page's flood fill. The page's **Load mask** button is the
+  same door.
+- **one convention per mask, and it is the CLI's.** The region mask is RGB through
+  `regions.LEGEND`; the foveal map is grey with BLACK MEANING SPEND STROKES HERE, exactly as
+  `--foveal` has always read it -- even though the page holds that map the other way up
+  internally (its canvas alpha IS the weight) and converts at its own edge. Two conventions
+  for one image is how a map gets applied backwards by whichever side was written second.
+- **partial is valid on the way in, complete on the way out.** `load` requires no field, so
+  a hand-written project can name three and mean "these, and the defaults for the rest";
+  `to_dict` writes all of them, because "the rest were default" is only true until the
+  defaults move. `verify_page.py` parses the PAGE's own exported document with the real
+  Python reader, which is the one check neither side could make alone.
 
 `oilpaint/flow.py` is the same argument for **structure**, and it attaches somewhere the
 skill's table does not list. (It is also per REGION now — see `regions.py` above.) Stroke placement is three things — position (quadtree + jitter),

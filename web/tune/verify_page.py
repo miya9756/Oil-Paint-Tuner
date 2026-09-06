@@ -597,6 +597,63 @@ def page_runtime(node):
           "...and it goes back out again, so the migration is not one-way",
           str(hot.get("lrailBack")))
 
+    # THE PROJECT FILE, AND THE ONE CHECK THAT COULD NOT BE MADE ON EITHER SIDE ALONE. The
+    # format is oilpaint/project.py's, and the whole point of that is that a file saved in
+    # the browser is a file `scripts/paint.py --project` takes. So the page's own output is
+    # parsed HERE, by the real Python reader -- a page writing a plausible-looking document
+    # Python refuses would pass every check either side could make by itself.
+    check(hot.get("projectSaved") is True, "the page writes a project file",
+          str(hot.get("projectName")))
+    if hot.get("projectJson"):
+        from oilpaint import project as project_mod  # noqa: E402
+        try:
+            doc = json.loads(hot["projectJson"])
+            got = project_mod.from_dict(doc)
+            check(True, "and the Python reader accepts it unchanged")
+            # The five parts, each read back through Python rather than looked for in the
+            # text: a key spelled the way the page happens to spell it would pass a string
+            # search and still be a field project.py never looks at.
+            check(got.config().flow == doc["params"]["flow"],
+                  "its settings arrive as a real PaintConfig", str(got.config().flow))
+            check(bool(got.overrides) and all(
+                      isinstance(k, int) for k in got.overrides),
+                  "its layers arrive keyed by region id", str(sorted(got.overrides)))
+            # The MASKS are not checked from this document, and the reason is the harness
+            # rather than the page: the DOM shim has no canvas, so `toDataURL` returns an
+            # empty URL and `rgnScan` finds no passages -- the page correctly writes no
+            # `masks` key for a mask that does not exist. Embedded masks are covered where
+            # they can be: `test_project_round_trips` in tests/test_core.py, and the
+            # committed example below, which carries two real ones.
+            check(got.source == doc.get("source", {}).get("name"),
+                  "and it records which photograph it was made for", str(got.source))
+        except Exception as e:
+            check(False, "and the Python reader accepts it unchanged", f"{type(e).__name__}: {e}")
+    # THE COMMITTED EXAMPLE, which is the thing a visitor actually meets. It carries all
+    # five parts including two real embedded masks, so it is also the only place the mask
+    # half of the format is exercised end to end -- and an example that rots into something
+    # the reader refuses is worse than no example, because it is the file people copy.
+    ex = os.path.join(ROOT, "examples", "two-passages.oilpaint.json")
+    if os.path.exists(ex):
+        from oilpaint import project as project_mod  # noqa: E402
+        try:
+            p = project_mod.load(ex)
+            check(p.region_mask is not None and p.foveal is not None
+                  and bool(p.overrides) and bool(p.vortices) and bool(p.params),
+                  "the committed example still carries all five parts",
+                  f"masks={p.region_mask is not None},{p.foveal is not None} "
+                  f"layers={sorted(p.overrides)} swirls={list(p.vortices)}")
+        except Exception as e:
+            check(False, "the committed example still carries all five parts",
+                  f"{type(e).__name__}: {e}")
+
+    # THE WAY BACK IN, read off the wire: a page that moved its own panel and never told the
+    # engine looks identical from the panel.
+    check("flow=hatch" in (hot.get("projectImported") or ""),
+          "opening a project reaches the engine, not just the panel",
+          str(hot.get("projectImported")))
+    check("project loaded" in (hot.get("projectStatus") or ""),
+          "and it says what it took from the file", str(hot.get("projectStatus")))
+
     # The harness itself must not fail in silence either: a throw in the drive above used to
     # end its process with exit 0, no output and no result file at all.
     check(not hot.get("driveFailed"), "nothing threw while the layers were driven",

@@ -24,6 +24,14 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("src")
     ap.add_argument("dst")
+    # ONE FILE FOR THE WHOLE SETUP -- the forty fields, the per-layer overrides, the swirl
+    # centres and both masks. See oilpaint/project.py for the format and for why the
+    # photograph is deliberately not in it. Every flag below still wins over the file, so
+    # `--project x.json --target-n 9000` means what it looks like and a project is a
+    # starting point rather than a straitjacket.
+    ap.add_argument("--project", metavar="FILE.json",
+                    help="load parameters, layers, swirl centres and masks from a project "
+                         "file; individual flags still override it")
     ap.add_argument("--strokes-out", help="write the stroke buffer as .npz")
     ap.add_argument("--max-side", type=int, default=0, help="downscale longest side first")
     # Mirrors WORK_MIN_SIDE in web/tune/index.html, which carries the reasoning. Short
@@ -78,8 +86,17 @@ def main():
             ap.add_argument(flag, type=type(f.default), default=None)
 
     a = ap.parse_args()
-    cfg = PaintConfig(**{f.name: getattr(a, f.name) for f in fields(PaintConfig)
-                         if getattr(a, f.name) is not None})
+    proj = None
+    if a.project:
+        from oilpaint import project as project_mod
+        try:
+            proj = project_mod.load(a.project)
+        except project_mod.ProjectError as e:
+            # A usage message, not a traceback: a bad project file is a typo.
+            ap.error(str(e))
+    flags = {f.name: getattr(a, f.name) for f in fields(PaintConfig)}
+    cfg = (proj.config(flags) if proj
+           else PaintConfig(**{k: v for k, v in flags.items() if v is not None}))
 
     img = load_image(a.src)
     # Down first, then up: --max-side is a cost ceiling and --min-side a quality floor, so
@@ -102,16 +119,27 @@ def main():
     # up. Bilinear: this is a smooth weight field, not a label mask, and the quadtree reads
     # it as a per-cell mean anyway.
     foveal = None
+    # The flag first, then the project. A project's map is already in the format's own
+    # convention -- BLACK means spend strokes here, the same as --foveal -- so the two share
+    # the resample and the inversion below rather than growing a second copy of either.
+    fov_src = None
     if a.foveal:
         from PIL import Image
+        fov_src = Image.open(a.foveal).convert("L")
+    elif proj is not None and proj.foveal is not None:
+        fov_src = proj.foveal
+    if fov_src is not None:
+        from PIL import Image
         import numpy as np
-        m = Image.open(a.foveal).convert("L").resize(
-            (img.shape[1], img.shape[0]), Image.BILINEAR)
+        m = fov_src.resize((img.shape[1], img.shape[0]), Image.BILINEAR)
         m = np.asarray(m, dtype="float32") / 255.0
-        foveal = m if a.foveal_invert else 1.0 - m
+        # --foveal-invert describes the FILE the flag names, so it does not reach into a
+        # project: the format fixes its own convention and a project that needed inverting
+        # would be a project that was written wrong.
+        foveal = m if (a.foveal_invert and a.foveal) else 1.0 - m
         if cfg.foveal_strength <= 0.0:
-            print("note: --foveal given but --foveal-strength is 0, so the map is ignored",
-                  file=sys.stderr)
+            print("note: a foveal map was given but --foveal-strength is 0, "
+                  "so the map is ignored", file=sys.stderr)
 
     # "0.3,0.4 0.72,0.55" -> [(0.3, 0.4), (0.72, 0.55)]. Fractions, not pixels, so the same
     # argument places the same swirls at any --max-side.
@@ -127,11 +155,16 @@ def main():
     vortices = None
     if a.vortices:
         vortices = _points(a.vortices, "--vortices")
+    elif proj is not None and proj.vortices is not None:
+        vortices = proj.vortices
     # A per-region set turns the plain list into the MAP shape `plan` also takes, with the
     # bare list becoming region 0's. Done here rather than in the engine so that the one
     # place a shape is chosen is the one place both flags are read.
     if a.region_vortices:
-        vmap = {0: vortices or []}
+        # A project may already have handed over the map shape, in which case --region-
+        # vortices edits it rather than replacing it: the flag names one region, and the
+        # regions it does not name have no business being dropped.
+        vmap = dict(vortices) if isinstance(vortices, dict) else {0: vortices or []}
         for spec in a.region_vortices:
             head, _, body = spec.partition(":")
             try:
@@ -148,16 +181,28 @@ def main():
     # these are label ids, and interpolating between region 2 and region 4 invents a
     # region 3 along every boundary in the picture.
     regions = None
-    if a.regions or a.region:
+    rgn_src = None
+    if a.regions:
+        from PIL import Image
+        rgn_src = Image.open(a.regions).convert("RGB")
+    elif proj is not None and proj.region_mask is not None:
+        rgn_src = proj.region_mask
+    if rgn_src is not None or a.region:
         from PIL import Image
         import numpy as np
         from oilpaint.regions import REGION_PARAMS, labels_from_image
-        if not a.regions:
-            ap.error("--region needs a --regions mask to say where that region is")
-        m = Image.open(a.regions).convert("RGB").resize(
-            (img.shape[1], img.shape[0]), Image.NEAREST)
+        if rgn_src is None:
+            ap.error("--region needs a mask to say where that region is: pass --regions, "
+                     "or a --project whose masks.regions is set")
+        m = rgn_src.resize((img.shape[1], img.shape[0]), Image.NEAREST)
         labels = labels_from_image(np.asarray(m, dtype="float32") / 255.0)
+        # The project's layers first, then --region on top of them, field by field rather
+        # than region by region: naming one field of region 1 on the command line must not
+        # silently drop the other six the file gave it.
         overrides = {}
+        if proj is not None:
+            for rid, ov in proj.overrides.items():
+                overrides[rid] = dict(ov)
         for spec in a.region:
             head, _, body = spec.partition(":")
             if not body:

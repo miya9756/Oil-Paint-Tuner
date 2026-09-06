@@ -1554,6 +1554,100 @@ def test_pipeline_determinism():
     check(not np.array_equal(a, c), "a different seed gives a different painting")
 
 
+def test_project_round_trips():
+    print("project: one file carries the whole setup, and carries it back")
+    import io as _io
+    from PIL import Image
+    from oilpaint import project as proj
+
+    # A setup with all five parts in it: fields, per-layer overrides, per-layer swirl
+    # centres, a region mask and a foveal map.
+    cfg = PaintConfig(target_n=1234, palette="zorn", palette_strength=0.65, seed=11)
+    overrides = {1: {"flow": "starry", "flow_strength": 0.8, "palette": "nocturne"},
+                 2: {"hue_rotate": -12.0}}
+    vortices = {0: [], 1: [(0.25, 0.1), (0.6, 0.2)]}
+    lab = np.zeros((32, 48, 3), dtype="uint8")
+    lab[:10] = (255, 0, 0)
+    lab[24:] = (0, 255, 0)
+    b = _io.BytesIO(); Image.fromarray(lab).save(b, "PNG")
+    fov = (np.linspace(0, 255, 32 * 48).reshape(32, 48)).astype("uint8")
+    c = _io.BytesIO(); Image.fromarray(fov, "L").save(c, "PNG")
+
+    doc = proj.to_dict(cfg, overrides, vortices, b.getvalue(), c.getvalue(),
+                       source="photo.jpg", note="a test")
+    got = proj.from_dict(doc)
+
+    # EVERY field, not a spot check: the whole claim of the format is that it is a complete
+    # record, and a round trip that compared three of them would pass a writer that dropped
+    # the other sixty.
+    back = got.config()
+    bad = [f.name for f in fields(PaintConfig)
+           if getattr(back, f.name) != getattr(cfg, f.name)]
+    check(not bad, f"every PaintConfig field survives the round trip ({bad[:4]})")
+    # `tau` defaults to None and means "search", which is not the same painting as 0.0 --
+    # so the one optional field is the one most worth naming.
+    check(back.tau is None, "an unset optional field comes back unset, not zeroed")
+    check(got.overrides == {1: {"flow": "starry", "flow_strength": 0.8,
+                                "palette": "nocturne"},
+                            2: {"hue_rotate": -12.0}}, "per-layer overrides survive")
+    check(got.vortices == {0: [], 1: [(0.25, 0.1), (0.6, 0.2)]},
+          "per-layer swirl centres survive, empty sets included")
+    check(got.region_mask is not None and got.region_mask.size == (48, 32),
+          "the region mask comes back at its own size")
+    check(got.foveal is not None and got.foveal.mode == "L",
+          "and the foveal map comes back as grey")
+    # The mask is LABELS, so it has to survive as labels rather than as something close.
+    got_lab = np.asarray(got.region_mask, dtype="float32") / 255.0
+    ids = set(np.unique(regions_mod.labels_from_image(got_lab)).tolist())
+    check(ids == {0, 1, 2}, f"and its passages are still 0, 1 and 2 ({sorted(ids)})")
+
+    # FLAGS WIN OVER THE FILE, which is what makes a project a starting point.
+    check(got.config({"target_n": 99}).target_n == 99, "an explicit value overrides the file")
+    check(got.config({"target_n": None}).target_n == 1234,
+          "and an absent one does not")
+
+    # A PARTIAL FILE IS VALID -- three fields and the defaults for the rest, which is what
+    # makes the format writable by hand.
+    thin = proj.from_dict({"format": proj.FORMAT, "version": 1,
+                           "params": {"target_n": 77}})
+    check(thin.config().target_n == 77 and thin.config().seed == PaintConfig().seed,
+          "a partial file means those fields and the defaults for the rest")
+
+    # ...and the refusals. Each of these would otherwise be a wrong picture rather than an
+    # error: a stray field repaints one passage from a quadtree the rest does not share,
+    # and a future version could mean anything at all.
+    for bad_doc, why in (
+        ({"format": "something-else"}, "a file that is not a project"),
+        ({"format": proj.FORMAT, "version": proj.VERSION + 1}, "a version from the future"),
+        ({"format": proj.FORMAT, "regions": {"1": {"target_n": 10}}},
+         "a per-layer field the engine cannot vary per layer"),
+        ({"format": proj.FORMAT, "regions": {"99": {"palette": "zorn"}}},
+         "a region id outside the legend"),
+        ({"format": proj.FORMAT, "vortices": [[0.1]]}, "a swirl centre that is not a pair"),
+    ):
+        try:
+            proj.from_dict(bad_doc)
+            check(False, f"refused: {why}")
+        except proj.ProjectError:
+            check(True, f"refused: {why}")
+
+
+def test_project_paints_what_it_describes():
+    print("project: the file and the flags paint the same picture")
+    from oilpaint import project as proj
+    img = synthetic()
+    cfg = PaintConfig(target_n=400, min_cell=8, max_cell=64, seed=5,
+                      palette="impressionist", palette_strength=0.7)
+    want, _, _ = paint(img, cfg)
+    # Through the document and back, which is the path every project file takes.
+    got_cfg = proj.from_dict(proj.to_dict(cfg)).config()
+    got, _, _ = paint(img, got_cfg)
+    # BIT-IDENTICAL, not close. A format that is a lossy record of a setup is a format that
+    # quietly produces a different painting from the one it claims to describe.
+    check(bool(np.array_equal(want, got)),
+          "a painting from a round-tripped project is bit-identical")
+
+
 if __name__ == "__main__":
     for fn in (
         test_quadtree_partition,
@@ -1587,6 +1681,8 @@ if __name__ == "__main__":
         test_flow_vortices_can_be_placed_by_hand,
         test_relight_params_is_a_true_claim,
         test_pipeline_determinism,
+        test_project_round_trips,
+        test_project_paints_what_it_describes,
     ):
         fn()
     print()

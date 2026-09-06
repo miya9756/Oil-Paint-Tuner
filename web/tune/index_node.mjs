@@ -152,6 +152,7 @@ function makeEl(id) {
   return el;
 }
 
+const made = [];
 const els = new Map();
 const $ = sel => {
   if (!els.has(sel)) els.set(sel, makeEl(sel.replace('#', '')));
@@ -161,7 +162,12 @@ const $ = sel => {
 globalThis.document = {
   querySelector: $, querySelectorAll: () => [],
   getElementById: id => $('#' + id),
-  createElement: () => makeEl('created'),
+  // EVERY created element is remembered. `Save project` writes its file by making an
+  // anchor, setting a data: URL on it and clicking it -- there is no other way for a page
+  // to hand over a file -- so the only way to read back what it wrote is to find that
+  // anchor afterwards. Used by nothing else; the list is cheap and the alternative is a
+  // download the harness cannot see.
+  createElement: () => { const e = makeEl('created'); made.push(e); return e; },
   body: makeEl('body'),
   // The rail's width lives as a custom property on the root element, so the grip needs a
   // documentElement with a style object to write it to.
@@ -249,10 +255,23 @@ globalThis.ImageData = class {
     else { this.data = a; this.width = b; this.height = c; }
   }
 };
-globalThis.File = class { constructor(bits, name, opts) { this.name = name; this.type = (opts && opts.type) || ''; this.size = 4; } };
+// A File KEEPS its bits when they are text, so the harness can hand the page a project
+// file. Everything else about it is still a stub -- the image path only ever needs a name
+// and a size.
+globalThis.File = class {
+  constructor(bits, name, opts) {
+    this.name = name; this.type = (opts && opts.type) || ''; this.size = 4;
+    this._text = (bits || []).filter(b => typeof b === 'string').join('');
+  }
+};
 globalThis.FileReader = class {
   readAsDataURL() {
     queueMicrotask(() => { this.result = 'data:image/jpeg;base64,AAAA'; this.onload && this.onload(); });
+  }
+  // The project path reads TEXT, not a data URL, and a shim with only the latter made
+  // importing a project silently do nothing at all.
+  readAsText(f) {
+    queueMicrotask(() => { this.result = (f && f._text) || ''; this.onload && this.onload(); });
   }
 };
 // restoreImage() re-fetches the stored data URL and loadSample() fetches the shipped jpeg;
@@ -990,6 +1009,41 @@ out.lrailNarrow = [[...globalThis.document.body.classList._s].includes('lrail'),
 setW(1440);
 await settle(120);
 out.lrailBack = [[...globalThis.document.body.classList._s].includes('lrail'), homeOf()];
+
+// 5g. THE PROJECT FILE. The format belongs to oilpaint/project.py, and the whole value of
+// that is that a file saved here is a file `scripts/paint.py --project` takes. So the page's
+// own output is handed back to verify_page.py, which parses it with the REAL Python reader
+// -- a page that wrote a plausible-looking document Python refused would otherwise pass
+// every check either side could make on its own.
+$('#projSave').fire('click', {});
+await settle(200);
+const dl = made.filter(e => typeof e.download === 'string'
+                         && e.download.endsWith('.oilpaint.json')).pop();
+out.projectSaved = !!dl;
+out.projectName = dl ? dl.download : '';
+out.projectJson = dl ? decodeURIComponent(String(dl.href).split(',').slice(1).join(',')) : '';
+
+// ...and back in. A project names some fields and leaves the rest alone, so the check is
+// that a named one MOVES and reaches the engine -- reading it off the wire, because a page
+// that updated its own panel and never told the worker looks identical from the panel.
+let imported = null;
+try{
+  const doc = JSON.parse(out.projectJson);
+  doc.params.flow = 'hatch';
+  doc.params.target_n = 4321;
+  imported = JSON.stringify(doc);
+}catch(e){ out.errors.push('project reparse: ' + e.message); }
+if(imported){
+  const pf = $('#projFile');
+  pf.fire('change', { target: { files: [new File([imported], 'x.oilpaint.json')], value: '' } });
+  // The status line first, and briefly: importing ends in `schedule()`, which puts a render
+  // 160 ms behind it, and 'draft...' then owns the line. Same transient as every other edit
+  // on this page -- see brushStatus.
+  await settle(80);
+  out.projectStatus = $('#status').textContent;
+  await settle(900);
+  out.projectImported = renders().pop() || '';
+}
 
 // 6. The page must have armed its own error reporting, whatever else happened.
 out.reportsErrors = (globalThis.window._h.error || []).length > 0

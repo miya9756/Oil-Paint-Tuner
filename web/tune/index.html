@@ -708,6 +708,12 @@ body.shell .grip:hover,body.shell .grip.on{
     <label class="tog" title="Show the full explanation under every control. The front cards carry a one-line version whether this is on or not."><input type="checkbox" id="hints"><span>help text</span></label>
     <label class="tog" title="The numbers behind the last render: stroke count, coverage, psnr, tau. Off by default -- they are for judging a change, not for looking at a picture. WARNINGS show whether this is on or not."><input type="checkbox" id="showStats"><span>stats</span></label>
     <button id="setupBtn" title="Copy this painting's parameters and placed swirl centres as JSON &mdash; the record of what is on screen, for reproducing it with scripts/paint.py.">Copy setup</button>
+    <!-- THE WHOLE SETUP AS ONE FILE: settings, layers, swirl centres and both masks, in the
+         format oilpaint/project.py owns. `Copy setup` stays -- it is the quick paste into a
+         message, and it is not a file. -->
+    <button id="projSave" title="Save everything &mdash; settings, layers, swirl centres and both masks &mdash; as one .oilpaint.json file. The photograph is not included: a project is a recipe, and it records only the picture's name.">Save project</button>
+    <button id="projOpen" title="Open an .oilpaint.json project. You can also just drop one on the page. Anything the file does not mention is left as it is.">Open project</button>
+    <input type="file" id="projFile" accept=".json,application/json" hidden>
     <button id="clearTop" disabled title="Forget the picture and start from an empty page.">Clear</button>
     <span class="spacer"></span>
     <span id="status">Waiting for an image.</span>
@@ -799,6 +805,11 @@ body.shell .grip:hover,body.shell .grip.on{
     <span class="tsep"></span>
     <label class="tog"><input type="checkbox" id="rgnShow" checked><span>show</span></label>
     <button id="rgnSave" title="Write the mask as a PNG. This is the file scripts/paint.py --regions reads.">Save mask</button>
+    <!-- ...and the way back in. The mask is an ordinary RGB PNG read through the legend, so
+         anything that saves a PNG can author one -- which matters because an image editor
+         is a far better tool for a complicated boundary than a flood fill is. -->
+    <button id="rgnLoad" title="Load a mask PNG painted somewhere else. Black is the base and each legend colour is a layer &mdash; the same file Save mask writes and scripts/paint.py --regions reads.">Load mask</button>
+    <input type="file" id="rgnFile" accept="image/*" hidden>
     <button id="rgnUndo" disabled>Undo</button>
     <button id="rgnClear" title="Delete every layer and wipe the mask.">Delete all</button>
   </div>
@@ -3564,9 +3575,16 @@ drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add(
 drop.addEventListener('dragleave', () => drop.classList.remove('over'));
 drop.addEventListener('drop', e => {
   e.preventDefault(); drop.classList.remove('over');
-  if(e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]);
+  // A .json dropped here is a PROJECT and not a photograph. Tested before `upload` rather
+  // than inside it, because `upload` is also the restore path and a stored session must
+  // never be re-read as a project.
+  const f = e.dataTransfer.files[0];
+  if(f && !maybeProjectFile(f)) upload(f);
 });
-file.addEventListener('change', e => { if(e.target.files[0]) upload(e.target.files[0]); });
+file.addEventListener('change', e => {
+  const f = e.target.files[0];
+  if(f && !maybeProjectFile(f)) upload(f);
+});
 window.addEventListener('paste', e => {
   const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
   if(it) upload(it.getAsFile());
@@ -3609,6 +3627,9 @@ function upload(f, restoring = false){
     vtxInit(); vtxStatus();
     // Name the file on the image itself. If this ever reads "painting.png", the source
     // pane is showing a previous result and the wipe is a painting of a painting.
+    // The bare name as well as the composed tag: a project records what photograph it was
+    // made for, and `source · sunset.jpg + mask` is a caption, not a file name.
+    $('#src').dataset.name = f.name || '';
     tagSource('source · ' + (f.name || 'pasted image'));
     // Seed the top layer with the source too, so the wipe is a valid comparison from the
     // first frame instead of showing a broken image until the first render lands.
@@ -4004,6 +4025,226 @@ async function thumbRun(){
     thumbRunning = false;
   }
 }
+
+// ---- the project file --------------------------------------------------------------------
+//
+// ONE FILE FOR THE WHOLE SETUP. A finished painting here is five things -- the forty-odd
+// PaintConfig fields, the per-layer overrides, the swirl centres, the region mask and the
+// foveal map -- and until this they lived in five places: the panel, `Copy setup`,
+// `Save mask`, and two conventions a person had to remember. Reproducing somebody's
+// painting meant collecting all of it by hand.
+//
+// THE FORMAT IS PYTHON'S, not this page's. `oilpaint/project.py` owns it -- what the keys
+// are, which fields a layer may carry, how a version is refused -- and this writes and
+// reads exactly that, so a file exported here is a file `scripts/paint.py --project` takes
+// and a file written by hand for the CLI is a file this page opens. A browser-only project
+// format would be a THIRD control surface next to schema.py and the CLI, which is the thing
+// this repo's architecture exists to avoid.
+//
+// THE PHOTOGRAPH IS NOT IN IT, deliberately: a project is a recipe, not the ingredients.
+// See project.py for the argument; the practical half is that a 5-8 MB phone photo turns
+// into 8-11 MB of base64, which is not a thing to commit beside code or paste into an
+// issue. Its NAME is recorded, so a file found later can say what it was made for.
+const PROJECT_FORMAT = 'oilpaint-project';
+const PROJECT_VERSION = 1;
+
+/** The foveal map as the format wants it: grey, and BLACK MEANS SPEND STROKES HERE.
+ *
+ *  The page holds the same map the other way up -- the brush canvas's ALPHA is the weight,
+ *  because one set of pixels then both shows the dab and records it -- and `--foveal` has
+ *  taken black to mean "spend here" since before this page existed. Two conventions for one
+ *  image is how a map gets applied backwards by whichever side was written second, so the
+ *  format has one and the page converts at its edge rather than asking the CLI to.
+ */
+function fovealPng(){
+  if(!maskCanvas || !maskInk) return null;
+  const w = maskCanvas.width, h = maskCanvas.height;
+  const src = maskCtx.getImageData(0, 0, w, h).data;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+  const im = ctx.createImageData(w, h);
+  for(let i = 0; i < w * h; i++){
+    // alpha 255 (paint it here) -> 0 (black). Unpainted alpha 0 -> 255 (white).
+    const g = 255 - src[4 * i + 3];
+    im.data[4 * i] = im.data[4 * i + 1] = im.data[4 * i + 2] = g;
+    im.data[4 * i + 3] = 255;
+  }
+  ctx.putImageData(im, 0, 0);
+  return out.toDataURL('image/png');
+}
+
+/** Everything on screen, as the document project.py reads. */
+function projectDoc(){
+  const doc = {format: PROJECT_FORMAT, version: PROJECT_VERSION,
+               params: Object.assign({}, params)};
+  const name = $('#src').dataset.name;
+  if(name) doc.source = {name};
+  const rw = rgnWire();
+  if(rw && Object.keys(rw).length) doc.regions = rw;
+  // `vtxWire()`, which is non-empty sets only. The format CAN carry an explicitly empty
+  // set -- flow.centres_for reads it as "this layer wants the preset's own spiral", as
+  // against an absent one meaning "inherit the base's" -- but `vtxAdopt` drops empties on
+  // the way back in, and the page has never had a gesture that produces one. Writing a
+  // state this page cannot then re-open would make export and import disagree; the empty
+  // set stays what it already was, something only the CLI can name.
+  const vw = vtxWire();
+  if(vw) doc.vortices = vw;
+  const masks = {};
+  if(regionCanvas && regionPresent && regionPresent.size)
+    masks.regions = regionCanvas.toDataURL('image/png');
+  const fov = fovealPng();
+  if(fov) masks.foveal = fov;
+  if(Object.keys(masks).length) doc.masks = masks;
+  return doc;
+}
+
+function exportProject(){
+  const doc = projectDoc();
+  const a = document.createElement('a');
+  a.href = 'data:application/json;charset=utf-8,'
+    + encodeURIComponent(JSON.stringify(doc, null, 1) + '\n');
+  const base = (($('#src').dataset.name || 'painting').replace(/\.[^.]*$/, ''))
+    || 'painting';
+  a.download = base + '.oilpaint.json';
+  a.click();
+  const n = doc.masks ? Object.keys(doc.masks).length : 0;
+  setStatus(`project saved${n ? ` — ${n} mask${n > 1 ? 's' : ''} embedded` : ''}`);
+}
+
+/** Draw a data URL onto a canvas, at that canvas's own size. Shared by both mask imports. */
+function drawInto(url, canvas, ctx){
+  return new Promise(res => {
+    const im = document.createElement('img');
+    im.onload = () => {
+      try{
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // NEAREST is not available on a 2D context, so the region mask relies on the
+        // legend's own colours being far apart and on `rgnNearest` resolving whatever the
+        // smoothing produces at a boundary. That is the SAME resolution step a hand-painted
+        // mask already goes through on import, and it is why the legend is cube corners.
+        ctx.drawImage(im, 0, 0, canvas.width, canvas.height);
+      }catch(e){ /* a mask that will not decode is not worth a red page */ }
+      res(true);
+    };
+    im.onerror = () => res(false);
+    im.src = url;
+  });
+}
+
+/** A grey PNG (black = spend) back into the brush canvas's alpha. The inverse of
+ *  `fovealPng`, and written next to it so the two cannot drift apart. */
+async function importFoveal(url){
+  if(!maskCtx || !maskCanvas) return false;
+  const w = maskCanvas.width, h = maskCanvas.height;
+  const tmp = document.createElement('canvas');
+  tmp.width = w; tmp.height = h;
+  const tctx = tmp.getContext('2d', {willReadFrequently: true});
+  if(!await drawInto(url, tmp, tctx)) return false;
+  const src = tctx.getImageData(0, 0, w, h).data;
+  const im = maskCtx.createImageData(w, h);
+  for(let i = 0; i < w * h; i++){
+    im.data[4 * i] = 196; im.data[4 * i + 1] = 54; im.data[4 * i + 2] = 32;
+    im.data[4 * i + 3] = 255 - src[4 * i];      // black -> fully weighted
+  }
+  maskCtx.putImageData(im, 0, 0);
+  maskTouched();
+  return true;
+}
+
+/** Open a project. Everything it does not name is LEFT ALONE rather than reset: a file that
+ *  carries only a palette is a legitimate thing to hand somebody, and the alternative --
+ *  silently restoring defaults for the rest -- would make importing one destroy work the
+ *  file said nothing about. */
+async function importProject(doc){
+  if(!doc || doc.format !== PROJECT_FORMAT)
+    throw new Error('not an ' + PROJECT_FORMAT + ' file');
+  // The same ceiling project.py enforces, and for the same reason: painting something
+  // plausible from a file this build has never seen is worse than refusing it.
+  if(typeof doc.version === 'number' && doc.version > PROJECT_VERSION)
+    throw new Error(`this project is version ${doc.version} and this page reads up to `
+                    + PROJECT_VERSION);
+  for(const [k, v] of Object.entries(doc.params || {})){
+    if(k in DEFAULTS && v !== null && v !== undefined) params[k] = v;
+  }
+  regionLayers = rgnAdopt(doc.regions || {});
+  regionSel = [0];
+  vortices = vtxAdopt(doc.vortices || {});
+  if(doc.masks && doc.masks.regions && regionCtx){
+    await drawInto(doc.masks.regions, regionCanvas, regionCtx);
+    regionKey++;
+    rgnScan();
+    saveRegionMask(regionCanvas.toDataURL('image/png'));
+  }
+  if(doc.masks && doc.masks.foveal) await importFoveal(doc.masks.foveal);
+  // The panel is REBUILT rather than poked row by row: a project can move any of forty
+  // fields plus every layer, and `boot(false)` is already the one path that puts a whole
+  // parameter set on screen -- but it would reload the image and re-seed from storage, so
+  // the rows are refreshed directly and the layer model rebuilt beside them.
+  for(const k of Object.keys(params)) showControl(k, params[k]);
+  rgnLayersBuild(); rgnSyncRows();
+  looksMark(); vtxStatus(); publishSetup();
+  const bits = [Object.keys(doc.params || {}).length + ' settings'];
+  const nl = Object.keys(doc.regions || {}).length;
+  if(nl) bits.push(nl + ' layer' + (nl > 1 ? 's' : ''));
+  if(doc.masks && doc.masks.regions) bits.push('a mask');
+  if(doc.masks && doc.masks.foveal) bits.push('a focus map');
+  setStatus('project loaded — ' + bits.join(', '));
+  schedule();
+}
+
+/** A dropped or chosen file that is not an image. Returns true if it was handled, so the
+ *  upload path can keep treating everything else as a photograph. */
+function maybeProjectFile(f){
+  if(!f || !/\.json$/i.test(f.name || '')) return false;
+  const fr = new FileReader();
+  fr.onload = async () => {
+    try{
+      await importProject(JSON.parse(fr.result));
+    }catch(e){
+      // To the status line and #err, never silently: a project that will not open looks
+      // exactly like a page that ignored the drop.
+      $('#err').textContent = 'That project would not open: ' + (e.message || e);
+      setStatus('project not loaded');
+    }
+  };
+  fr.readAsText(f);
+  return true;
+}
+
+$('#projSave').addEventListener('click', exportProject);
+$('#projOpen').addEventListener('click', () => $('#projFile').click());
+$('#projFile').addEventListener('change', e => {
+  if(e.target.files[0]) maybeProjectFile(e.target.files[0]);
+  e.target.value = '';           // so the same file can be opened twice running
+});
+// A MASK MADE SOMEWHERE ELSE. The region mask is an ordinary RGB PNG read through the
+// legend, so anything that can save a PNG can author one -- and this is the way in for a
+// mask painted in an image editor over the photograph, which is a far better tool for a
+// complicated boundary than a flood fill.
+$('#rgnLoad').addEventListener('click', () => $('#rgnFile').click());
+$('#rgnFile').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if(!f || !regionCtx) return;
+  const fr = new FileReader();
+  fr.onload = async () => {
+    undoSnap('rgn');
+    await drawInto(fr.result, regionCanvas, regionCtx);
+    regionKey++;
+    rgnScan();
+    // The layers the mask turned out to contain, seeded inert so importing one never
+    // changes the picture on its own -- the same rule `+ New layer` follows.
+    for(const id of regionPresent) rgnEnsure(id);
+    saveRegionMask(regionCanvas.toDataURL('image/png'));
+    rgnLayersBuild(); rgnSyncRows(); publishSetup();
+    const n = regionPresent.size;
+    setStatus(n ? `mask loaded — ${n} passage${n > 1 ? 's' : ''}`
+                : 'that mask has no passages the legend recognises');
+    if(n) schedule();
+  };
+  fr.readAsDataURL(f);
+});
 
 // ---- the sample the page opens with ---------------------------------------------------
 // Fetched and handed to `upload` as a File rather than assigned to #src directly, so it
