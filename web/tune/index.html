@@ -516,6 +516,8 @@ button.on:hover{filter:brightness(1.08);color:#fff}
 .row.show-hint .hint{display:block}
 
 footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26px}
+footer a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+footer a:hover{color:var(--accent)}
 
 /* ---- the app shell -------------------------------------------------------------------
    THE STACKED LAYOUT WASTES A PC SCREEN THREE WAYS, and only one of them is obvious.
@@ -890,7 +892,14 @@ body.shell .grip:hover,body.shell .grip.on{
   </div><!-- /.rail -->
 </div>
 
-<footer>&copy; 2026 Mingyang Song &middot; All rights reserved.</footer>
+<!-- THE WAY BACK TO THE CODE. This page is the whole tool, so a visitor who wants to know
+     what it is doing has nowhere to go from here -- the pipeline, the parity suites and the
+     step-by-step guide all live in the repository. An ABSOLUTE url on purpose: everything
+     else the page fetches is relative because Pages serves it under a project subpath, and
+     this one is deliberately leaving the site. -->
+<footer>&copy; 2026 Mingyang Song &middot; All rights reserved. &middot;
+  <a href="https://github.com/miya9756/Oil-Paint-Tuner">source and how it works, on
+  GitHub</a></footer>
 
 <script type="module">
 import { saveSetup, loadSetup, saveImage, loadImage,

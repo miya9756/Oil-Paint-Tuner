@@ -4,6 +4,8 @@ Turn a photograph into an oil painting — in your browser, with the sliders in 
 
 ![A photograph of sunflowers beside the same photograph rendered as an oil painting, the brush strokes following the curve of each petal](assets/readme-before-after.jpg)
 
+### ▶ [Open the tuner](https://miya9756.github.io/Oil-Paint-Tuner/)
+
 Drop a picture in, move a slider, watch the painting change. Nothing is uploaded and
 nothing is downloaded: the whole painter runs inside the page, on your machine, offline.
 There is no account, no server, no upload limit, and no queue.
@@ -12,17 +14,22 @@ There is no account, no server, no upload limit, and no queue.
 
 ## Try it
 
-The tuner is one HTML file and a folder of JavaScript. To run it locally:
+It is live at **<https://miya9756.github.io/Oil-Paint-Tuner/>** — one page, nothing to
+install. It opens on a sample photograph already painted, so there is something to play with
+immediately; drop your own in at any time, or use the **Clear** button to start over. That
+opening picture is [`examples/sample.oilpaint.json`](examples/sample.oilpaint.json), the same
+file the command line takes, so anything you meet there you can reproduce here.
+
+To run the same page from this repository instead:
 
 ```bash
 python web/tune/serve_tune.py        # then open http://localhost:8137
 ```
 
 That is the whole setup. You need Python with **numpy** and **Pillow** installed, and
-nothing else — no build step, no `npm install`, no GPU.
-
-The page opens on a sample photograph so there is something to play with immediately.
-Drop your own in at any time, or use the **Clear** button to start over.
+nothing else — no build step, no `npm install`, no GPU. The deployed page is built from this
+tree by [`web/tune/build_static.py`](web/tune/build_static.py) and published by
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) on every push to `main`.
 
 ## What it actually does
 

@@ -151,6 +151,14 @@ def verify(dist, modules):
     abs_paths = re.findall(r'(?:src|href)="(/[^/][^"]*)"', page)
     check(not abs_paths, "no root-absolute paths in the page", str(abs_paths))
 
+    # THE WAY BACK TO THE SOURCE. The deployed page is the whole tool, so a visitor who wants
+    # to know what it is doing has nowhere to go from it unless the page says. Matched as a
+    # SHAPE rather than as the literal URL: pinning the address here would put the same
+    # string in two files and make renaming the repository a silent half-rename.
+    back = re.search(r'href="https://github\.com/[^/"]+/[^/"]+/?"', page)
+    check(bool(back), "the published page links back to its source",
+          back.group(0) if back else "no github link in the page")
+
     # .gitattributes is deliberately broad (see the sibling-repos skill), so a runner that
     # clones without git-lfs would copy 130-byte pointer stubs into the deploy tree and
     # publish a page whose modules are text files describing themselves.
