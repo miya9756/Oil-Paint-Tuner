@@ -73,9 +73,30 @@ function makeEl(id) {
     get innerHTML() { return this._html; },
     _src: '', onload: null, onerror: null, checked: false, disabled: false, title: '',
     width: 0, height: 0, naturalWidth: 0, naturalHeight: 0,
+    // THE LAID-OUT BOX. Without these, sizeWipe read `undefined` for the stage and produced
+    // NaN -- which never threw, and so never once exercised the arithmetic that decides how
+    // big the picture is. Both numbers are pinned by a constraint rather than picked:
+    //
+    //   560 wide, because `sourceNote` warns when a source is shown at more than 1.15x and
+    //   the shimmed devicePixelRatio is 2 against a 1000px source. At the 700 that matches
+    //   getBoundingClientRect that is 1.4x -- a REAL warning, correctly raised, which keeps
+    //   #stats on screen and fails the two checks that ask whether it hides. 560 gives
+    //   1.12x. (dpr stays 2: renderWidth caps at PREVIEW_CAP either way, and dropping it to
+    //   1 would move every `render 1100x617` expectation in this file.)
+    //
+    //   260 tall, so the two layouts' height bounds actually DIFFER. Stacked bounds the
+    //   picture at 62% of a 900px window (558) and the width wins; the shell bounds it at
+    //   the stage's own box. At 394 the shell's bound would not bind either and both
+    //   layouts would report the same width -- so the check that says the shell sizes from
+    //   its pane would pass without ever having been true.
+    clientWidth: 560, clientHeight: 260,
     // `setProperty` because the layers panel sets a CSS custom property for the selected
     // layer's colour, which is what `style` is for and what a bare object is not.
-    style: { setProperty() {}, removeProperty() {}, getPropertyValue: () => '' },
+    // setProperty RECORDS. The rail's width is a custom property and nothing else, so a
+    // no-op here would make the grip drag unobservable -- and "the layout number the
+    // arithmetic reads back" is exactly the half worth checking.
+    style: { _p: {}, setProperty(k, v) { this._p[k] = v; }, removeProperty(k) { delete this._p[k]; },
+             getPropertyValue(k) { return this._p[k] || ''; } },
     dataset: {},
     classList: {
       _s: new Set(),
@@ -96,7 +117,21 @@ function makeEl(id) {
     setAttribute() {}, removeAttribute() {}, focus() {}, click() { this.fire('click', {}); },
     setPointerCapture() {}, releasePointerCapture() {}, hasPointerCapture() { return false; },
     scrollIntoView() {},
-    appendChild(c) { this._kids.push(c); return c; }, remove() {},
+    // PARENTAGE IS TRACKED, because the page now MOVES a node rather than only building
+    // one: the Allocation card's container migrates between the two rails as the window
+    // crosses the three-column threshold, and `railsSync` guards on `parentNode` so it
+    // moves once rather than on every resize. `insertBefore` is the other half -- going
+    // back into the right rail it has to land above the other cards, and a shim with only
+    // appendChild made that path throw and took the whole page down with it.
+    parentNode: null,
+    appendChild(c) { this._kids.push(c); c.parentNode = this; return c; },
+    insertBefore(c, ref) {
+      const i = this._kids.indexOf(ref);
+      if (i < 0) this._kids.push(c); else this._kids.splice(i, 0, c);
+      c.parentNode = this;
+      return c;
+    },
+    remove() {},
     querySelector() { return makeEl('inner'); },
     querySelectorAll() { return []; },
     getBoundingClientRect() { return { left: 0, top: 0, width: 700, height: 394 }; },
@@ -128,14 +163,39 @@ globalThis.document = {
   getElementById: id => $('#' + id),
   createElement: () => makeEl('created'),
   body: makeEl('body'),
+  // The rail's width lives as a custom property on the root element, so the grip needs a
+  // documentElement with a style object to write it to.
+  documentElement: makeEl('html'),
   addEventListener() {},
 };
 globalThis.window = {
   _h: {}, devicePixelRatio: 2,
+  // Sizes the page reads directly. The stacked layout bounds the picture at 62vh of this,
+  // so a window with no height at all made sizeWipe produce NaN -- harmless, and it also
+  // meant the arithmetic was never once exercised.
+  innerWidth: job.wide ? 1440 : 800, innerHeight: job.wide ? 900 : 500,
+  // WHICH LAYOUT THE PAGE IS IN, from a shimmed viewport rather than a real window. The
+  // shell is stamped by `shellSync` off these queries, so without them the harness could
+  // only ever drive the stacked page -- and the shell is the half with the new arithmetic.
+  //
+  // It EVALUATES the query rather than answering a flag, because there are two thresholds
+  // now and they are different numbers: the shell at 1100 and the three-column layout at
+  // 1360. A matchMedia that ignored its argument would make those indistinguishable and
+  // every check about one of them would silently be a check about the other.
+  matchMedia(q) {
+    const need = (re, v) => { const m = re.exec(q); return !m || v >= parseFloat(m[1]); };
+    const matches = need(/min-width:\s*(\d+)/, globalThis.window.innerWidth)
+                 && need(/min-height:\s*(\d+)/, globalThis.window.innerHeight);
+    return { matches, media: q,
+             addEventListener() {}, removeEventListener() {}, addListener() {} };
+  },
   addEventListener(t, f) { (this._h[t] = this._h[t] || []).push(f); },
   prompt() { return null; },
 };
-globalThis.getComputedStyle = () => ({ fontFamily: 'serif' });
+// `--rail` is read back through this before a grip drag, so it has to answer with something
+// parseable or the drag starts from NaN and the rail jumps to its clamp on the first move.
+globalThis.getComputedStyle = () => ({ fontFamily: 'serif',
+                                       getPropertyValue: () => '340px' });
 // defineProperty rather than assignment: node ships its own `navigator` as a getter-only
 // accessor on globalThis (18+), so a plain assignment throws TypeError at module scope and
 // takes the whole harness down before a single check runs -- which reads as "the page script
@@ -206,13 +266,29 @@ globalThis.fetch = async () => ({ ok: true, status: 200,
 globalThis.requestAnimationFrame = () => 0;
 
 // --- the fake engine ---------------------------------------------------------------------
-let served = 0;
+let served = 0, engines = 0;
 globalThis.Worker = class {
-  constructor() { this.onmessage = null; this._l = {}; out.events.push('worker started'); }
+  // ONLY THE FIRST ENGINE IS ON THE RECORD. The page runs two: the painting engine, and a
+  // second one that paints the looks strip's thumbnails in the background. Both are the
+  // same module and both arrive here, but every check in verify_page.py reads `out.events`
+  // to ask what THE PAGE ASKED FOR -- "did that fill re-render", "did that click place a
+  // swirl" -- and a thumbnail is neither. Recording both made two checks fail against a
+  // page that was working correctly, which is the worst kind of harness defect: it accuses
+  // the code. Ordering is the discriminator rather than a flag on the message, because the
+  // page must not have to declare to a test which of its workers is the real one.
+  constructor() {
+    this.onmessage = null; this._l = {};
+    this.aux = engines++ > 0;
+    if (!this.aux) out.events.push('worker started');
+  }
   addEventListener(t, f) { (this._l[t] = this._l[t] || []).push(f); }
   postMessage(msg) {
     const reply = m => queueMicrotask(() =>
       (this._l.message || []).forEach(f => f({ data: m })));
+    // The auxiliary engine still ANSWERS -- the strip has to paint while the page is
+    // driven, or the harness would be exercising a feature switched off -- it simply says
+    // nothing about it.
+    const push = e => { if (!this.aux) out.events.push(e); };
     if (msg.type === 'init') {
       // `staleSchema` serves the schema a server started BEFORE the hue fields existed
       // would serve: the rows and the defaults both missing. That is the configuration
@@ -237,14 +313,14 @@ globalThis.Worker = class {
       // only real failure mode is a row writing to the wrong place, and from outside that
       // looks exactly like a row that works -- so a probe field is read off the wire for
       // the base and for every layer, and the checks compare them.
-      out.events.push(`base warm_cool=${msg.params.warm_cool} flow=${msg.params.flow}`);
+      push(`base warm_cool=${msg.params.warm_cool} flow=${msg.params.flow}`);
       for (const k of Object.keys(msg.regionOverrides || {})) {
         const ov = msg.regionOverrides[k];
         // TWO probe fields, one per half of the model: a colour one, which must never move
         // the geometry, and a flow one, which must move only this passage's. They are read
         // off the wire for the same reason -- a row writing to the wrong half looks exactly
         // like a row that works.
-        out.events.push(`region ${k} warm_cool=${ov.warm_cool} flow=${ov.flow} `
+        push(`region ${k} warm_cool=${ov.warm_cool} flow=${ov.flow} `
           + `fields=${Object.keys(ov).sort().join(',')}`);
       }
       const px = new Uint8ClampedArray(msg.w * msg.h * 4).fill((served++ % 250) + 1);
@@ -253,7 +329,7 @@ globalThis.Worker = class {
       // picture" from "2 for Region 1" -- which is the one thing that can go wrong.
       // `fov` is appended rather than inserted: every check above matches this line by
       // substring, and a field in the middle would rewrite what those matches mean.
-      out.events.push(`render ${msg.w}x${msg.h} flow=${msg.params.flow}`
+      push(`render ${msg.w}x${msg.h} flow=${msg.params.flow}`
         + ` fov=${msg.params.foveal_strength}`
         + (msg.vortices ? ` v=${vtxTally(msg.vortices)}` : '')
         + (msg.regionLabels ? ` r=${Object.keys(msg.regionOverrides || {}).sort()}`
@@ -332,13 +408,19 @@ const cardList = host => host._kids.map(c => ({
   // "which tools are" are two different questions and one list cannot answer both.
   rows: c._kids.map(r => r.dataset.name).filter(Boolean),
   tools: c._kids.map(r => r._id).filter(x => x && x !== 'created') }));
-out.frontCards = cardList($('#cards'));
+// THE FRONT ROW IS BOTH CONTAINERS. `Allocation` is built into `#leftCards` so it can be
+// docked on the other side of the picture, and a census that read only `#cards` would
+// report six schema controls as living on no card at all -- which is exactly what the
+// "every control is on exactly one card" check is for, and exactly the wrong reason for it
+// to fire. Left first, matching FRONT_GROUPS' own order.
+out.frontCards = cardList($('#leftCards')).concat(cardList($('#cards')));
 out.advCards = cardList($('#advCards'));
 // THE ROW MARKUP ITSELF. Every row used to be printed as its Python identifier; the label
 // now leads and the identifier follows it, and the second half is the one worth pinning --
 // `target_n` is what scripts/paint.py takes and what `Copy setup` writes, so a redesign
 // that tidied it away would cut the path from the page to the command line.
-const allCards = $('#cards')._kids.concat($('#advCards')._kids);
+const allCards = $('#leftCards')._kids
+  .concat($('#cards')._kids, $('#advCards')._kids);
 out.rowMarkup = {};
 for (const c of allCards) {
   for (const r of c._kids) if (r.dataset.name) out.rowMarkup[r.dataset.name] = r.innerHTML;
@@ -350,6 +432,10 @@ out.cardNotes = allCards.map(c => (c.innerHTML.match(/<p class="csub">(.*?)<\/p>
 //     like a row that works. So this drives it end to end and reads back WHERE each value
 //     landed, off the render message the fake engine actually received.
 const settle = ms => new Promise(r => setTimeout(r, ms));
+// Undo's resting state, read HERE and not in section 5c: by the time the drive reaches
+// that section it has painted, filled and placed for real, so an empty stack is only
+// observable before any of it.
+out.undoIdle = $('#rgnUndo').disabled;
 const renders = () => out.events.filter(e => e.startsWith('render'));
 // The base's own value, read off the last render the engine RECEIVED rather than out of the
 // page's module scope: the wire is what the picture is actually painted from, so it is the
@@ -745,6 +831,165 @@ vClick(250, 100, 8);
 await settle(600);
 out.fsBarCount = $('#vtxCount').textContent;
 $('#vtxBtn').fire('click', {});
+
+// 5b. THE LOOKS STRIP. Two things can go wrong here and neither is visible from outside:
+// a look that writes past the layer selection (so the rows the visitor is looking at are
+// not the rows that moved), and a look that sets only the fields it cares about (so the
+// previous look's flow keeps running under it). Both are read off the WIRE, because that
+// is the only place that says what was actually painted.
+const lkBtns = () => ($('#lkRow')._kids || []);
+const lkClick = k => { const b = lkBtns().find(x => x.dataset.look === k); if (b) b.fire('click', {}); };
+out.looksBuilt = lkBtns().map(b => b.dataset.look);
+out.looksHidden = $('#looks').hidden;
+
+lkClick('vangogh');
+await settle(700);
+out.lookVanGogh = renders().pop() || '';
+
+// THE INVARIANT LOOK_OFF EXISTS FOR. `photo` names nothing of its own -- its `set` is
+// `lookSet({})` -- so if a look carried only the fields it declared, van Gogh's `starry`
+// would still be combing the paint underneath it. It must arrive with flow=none.
+lkClick('photo');
+await settle(700);
+out.lookZorn = renders().pop() || '';
+
+// A look is a whole-picture decision, so it goes to the BASE and moves the selection there
+// to say so -- rather than writing past a layer selection that then disagrees with the
+// rows on screen.
+const someLayer = ($('#rgnLayers')._kids || []).map(r => r.dataset.id).find(x => x !== '0');
+if (someLayer) {
+  lyrRow(Number(someLayer)).fire('click', {});
+  out.lookSelBefore = [...lyrRow(Number(someLayer)).classList._s].includes('on');
+  lkClick('monet');
+  await settle(700);
+  out.lookSelAfter = [...lyrRow(0).classList._s].includes('on');
+  out.lookBaseWire = (out.events.filter(e => e.startsWith('base ')).pop() || '');
+}
+
+// 5c. UNDO. Its failure mode is silent in the one way that matters: an undo that restores
+// the mask PIXELS but not the layer LIST leaves a picture full of passages no panel row can
+// reach, and from outside it looks exactly like an undo that worked. So the list is what is
+// read back, and `Delete all` -- the one click on this page that can throw away an
+// afternoon -- is what it is read back from.
+$('#rgnBtn').fire('click', {});
+await settle(120);
+$('#rgnAdd').fire('click', {});
+await settle(200);
+out.undoLayersBefore = ($('#rgnLayers')._kids || []).map(r => r.dataset.id);
+out.undoArmed = $('#rgnUndo').disabled === false;
+$('#rgnClear').fire('click', {});
+await settle(300);
+out.undoLayersWiped = ($('#rgnLayers')._kids || []).map(r => r.dataset.id);
+$('#rgnUndo').fire('click', {});
+// Read SYNCHRONOUSLY, for the reason brushStatus is: `schedule()` puts a render 160 ms
+// behind this, and 'draft...' then owns the line. The message is for the moment of the
+// click, and that is the moment to read it in.
+out.undoStatus = $('#status').textContent;
+await settle(400);
+out.undoLayersBack = ($('#rgnLayers')._kids || []).map(r => r.dataset.id);
+$('#rgnBtn').fire('click', {});
+await settle(120);
+
+// ...and the swirl centres, which are a list rather than a canvas and so take the other
+// arm of undoSnap entirely.
+$('#vtxBtn').fire('click', {});
+await settle(200);
+// The tool is live only when its target carries a swirl field, and section 5b left the
+// panel on a look whose flow is `none` -- so a click here would be correctly inert and the
+// undo below would pop an entry belonging to another tool. The Van Gogh look is the
+// shortest way to a swirl field on the BASE, and this drive has already proven that path.
+lkClick('vangogh');
+await settle(700);
+const vtxBefore = $('#vtxCount').textContent;
+// (300, 500) AND NOT (300, 200), which is the letterbox. The full-screen section above
+// replaces this canvas's getBoundingClientRect with a 1000x1000 SQUARE box around a
+// 1000x561 picture and never puts it back, so the picture occupies y 219.5..780.5 and
+// everything outside that is black the tools correctly refuse to mark. A click there
+// places nothing, which would leave the undo below popping another tool's entry.
+vClick(300, 500, 21);
+await settle(500);
+out.undoVtxPlaced = $('#vtxCount').textContent;
+$('#vtxUndo').fire('click', {});
+await settle(500);
+out.undoVtxBack = [vtxBefore, $('#vtxCount').textContent];
+$('#vtxBtn').fire('click', {});
+await settle(120);
+
+// 5d. THE APP SHELL. `shellSync` is the single owner of the threshold -- there is no media
+// query for it -- so what has to be true is that the stamp follows the query, and that the
+// grip writes the one number the layout AND sizeWipe both read.
+// `document.body` and `document.documentElement` are their own elements in this shim, NOT
+// the ones `$('body')` / `$('html')` would mint -- `$` caches by selector string and has
+// never seen either. Reading the wrong one gives a page that looks unstamped while working
+// perfectly, which is a harness bug that accuses the code.
+out.shellStamped = [...globalThis.document.body.classList._s].includes('shell');
+// WHERE THE PICTURE'S HEIGHT BOUND CAME FROM, as a number. Stacked, it is 62% of the
+// viewport (900 -> 558) and the 700px stage width wins; in the shell it is the stage's own
+// box (394 - 28 = 366) and the height wins instead. The two layouts must NOT agree here --
+// that they differ is the whole change.
+out.wipeWidth = $('#wipe').style.width;
+const railNow = () => globalThis.document.documentElement.style.getPropertyValue('--rail');
+const grip = $('#railGrip');
+grip.fire('pointerdown', { clientX: 1000, pointerId: 41 });
+// Dragging LEFT widens: the handle is on the rail's left edge and the rail is anchored to
+// the right of the window, so the delta is subtracted.
+grip.fire('pointermove', { clientX: 900, pointerId: 41 });
+out.railWider = railNow();
+// ...and it is clamped, or a drag past the pane would leave a canvas with no width.
+grip.fire('pointermove', { clientX: 2000, pointerId: 41 });
+out.railClamped = railNow();
+grip.fire('pointerup', { clientX: 2000, pointerId: 41 });
+await settle(200);
+out.railReleased = [...grip.classList._s].includes('on');
+
+// 5e. THE DOCKED LAYERS PANEL. The list, the readout and the prose used to sit in the bar
+// above the canvas -- ~170px of the one thing the page is for, spent by arming the tool
+// that needs the picture most. In the rail they cost the canvas nothing, and the panel can
+// then outlive the tool, which is the half with a real claim in it: the selection is what
+// re-points the Palette and Flow rows, and those rows are live whether or not a paint tool
+// happens to be open.
+const lyrShown = () => $('#lyrPanel').hidden === false;
+// Start from nothing: arm, wipe, close.
+$('#rgnBtn').fire('click', {});
+await settle(150);
+$('#rgnClear').fire('click', {});
+await settle(300);
+$('#toolNone').fire('click', {});
+await settle(150);
+out.lyrIdle = lyrShown();
+$('#rgnBtn').fire('click', {});
+await settle(150);
+out.lyrArmed = [lyrShown(), $('#lyrCount').textContent];
+$('#rgnAdd').fire('click', {});
+await settle(250);
+out.lyrWithLayer = [lyrShown(), $('#lyrCount').textContent];
+// THE CLAIM. Putting the tool away must not take the layer list with it.
+$('#toolNone').fire('click', {});
+await settle(200);
+out.lyrOutlivesTool = [lyrShown(), $('#lyrCount').textContent];
+
+// 5f. THE THREE-COLUMN LAYOUT. `Allocation` decides how many strokes there are and where
+// they go, so on a window wide enough it is docked on the far side of the picture --
+// Lightroom's shape, a panel either side. The claim with a bug in it is not that it appears
+// but that it MIGRATES: one node, moved between the two rails as the window crosses 1360,
+// never a second copy (which would be two control surfaces for the same six fields) and
+// never rebuilt (which would detach every listener the cards carry).
+const homeOf = () => (($('#leftCards').parentNode || {})._id) || 'none';
+out.lrailWide = [[...globalThis.document.body.classList._s].includes('lrail'), homeOf()];
+// Narrow the window past the threshold, but not past the shell's -- so this is the middle
+// band, where there is room for one rail and not for two.
+const setW = w => {
+  globalThis.window.innerWidth = w;
+  (globalThis.window._h.resize || []).forEach(f => f());
+};
+setW(1200);
+await settle(120);
+out.lrailNarrow = [[...globalThis.document.body.classList._s].includes('lrail'),
+                   [...globalThis.document.body.classList._s].includes('shell'), homeOf()];
+// ...and back, because a one-way migration would pass every check above.
+setW(1440);
+await settle(120);
+out.lrailBack = [[...globalThis.document.body.classList._s].includes('lrail'), homeOf()];
 
 // 6. The page must have armed its own error reporting, whatever else happened.
 out.reportsErrors = (globalThis.window._h.error || []).length > 0

@@ -14,6 +14,12 @@
   --bg:#f4f2ec; --surface:#fdfbf6; --fg:#23201b; --dim:#7a736a;
   --line:#ded7ca; --accent:#9a5b34; --warn:#a8442e;
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  /* The docked rail's width in the app shell, and the one number the grip writes. 340 is
+     a little over the 258px a control card asks for, so a single column has room for its
+     labels without a second one trying to form. */
+  --rail:340px;
+  /* The left rail, which holds Allocation alone and so needs less than the right. */
+  --lrail:280px;
 }
 html{background:var(--bg)}
 *{box-sizing:border-box}
@@ -38,8 +44,36 @@ header .sub{color:var(--dim);font-size:12.5px}
    base layer in normal flow, top layer absolutely positioned and clipped with
    clip-path:inset(0 0 0 P%), a 2px bar at left:P%, corner tags. Same technique, because
    comparing a painting against its source is the same question that page asks of grain. */
-.stage{background:var(--surface);border:1px solid var(--line);border-radius:10px;
-  padding:14px;display:flex;align-items:center;justify-content:center;min-height:280px}
+/* ---- the picture STAYS WITH THE CONTROL ----------------------------------------
+   `.cards` sits under the stage rather than beside it, and the comment on that rule says
+   why: the panel is taller than the picture it controls, so a side column put half the
+   parameters below the fold. True, and it answered only half the question -- because the
+   same stacking puts the PICTURE below the fold as seen FROM the cards. Drag a slider on
+   the Palette card and the thing it changes is off screen, so the loop is drag, scroll up,
+   look, scroll back down. That is the largest tax on flow in the page, and it is not what
+   the side-panel argument was about: the cards keep their full width here, the picture
+   simply stops leaving.
+
+   Three things it needs, and each is load-bearing:
+     - A STACKING CONTEXT ABOVE THE PANEL. `z-index` on a positioned .stage contains
+       #wipe's own layers (masks 3 and 4, guide 5, busy pill 4) instead of letting them
+       compete with the cards in the shell's context -- so their order relative to each
+       other is untouched and the whole stage passes over the panel as one thing.
+     - THE BANDS ABOVE AND BELOW ARE PAINTED BY THE SHADOW, not by padding. The stage IS
+       the bordered surface, so padding would grow the box rather than clear a gap around
+       it; two hard `var(--bg)` shadows paint the page background 10px above and below the
+       pinned box, in its own rounded shape, and a card scrolling under stops at that edge
+       instead of touching the border. The third shadow is the soft one that says the box
+       is over the panel rather than in it.
+     - AN OPT-OUT ON A SHORT VIEWPORT. sizeWipe caps the picture at 62vh; pinning that in
+       a 600px-tall window leaves ~90px of scrollable panel, which is worse than not
+       pinning at all. Under 640px of viewport height the page goes back to scrolling
+       whole, and `top:auto` is what releases a sticky box without disturbing the rest. */
+.stage{position:sticky;top:10px;z-index:6;
+  background:var(--surface);border:1px solid var(--line);border-radius:10px;
+  padding:14px;display:flex;align-items:center;justify-content:center;min-height:280px;
+  box-shadow:0 -10px 0 var(--bg),0 10px 0 var(--bg),0 13px 11px -9px rgba(35,32,27,.20)}
+@media(max-height:640px){.stage{position:static;top:auto;box-shadow:none}}
 .wipe{position:relative;margin:0 auto;line-height:0;background:#e8e3d8;border-radius:6px;
   overflow:hidden;user-select:none;touch-action:none;cursor:ew-resize;max-width:100%}
 .wipe img{display:block;width:100%;height:auto}
@@ -315,6 +349,11 @@ button.on:hover{filter:brightness(1.08);color:#fff}
    and you tune a passage by looking at the paint under it. */
 #rgnCanvas{opacity:.34}
 #rgnLayers{flex-basis:100%;display:flex;flex-direction:column;gap:2px;margin-top:2px}
+/* In the rail the list is a panel rather than the tail of a flex strip, so the two pieces
+   that were laid out BY that strip have to say so themselves. */
+#lyrPanel #rgnEditing{display:block;margin:0 0 8px}
+#lyrPanel .csub{margin:10px 0 0}
+#lyrPanel h2 em{font-family:var(--mono)}
 .lyr{display:flex;align-items:center;gap:7px;padding:3px 6px;border-radius:6px;
   border:1px solid transparent;cursor:pointer;user-select:none}
 .lyr:hover{background:rgba(0,0,0,.035)}
@@ -361,6 +400,52 @@ button.on:hover{filter:brightness(1.08);color:#fff}
 #stats span{white-space:nowrap;line-height:1.9}
 #stats b{color:var(--fg);font-weight:600}
 #stats .warn{color:var(--warn)}
+/* ---- the looks strip -----------------------------------------------------------
+   THE FRONT DOOR WAS FORTY IDENTIFIERS. Everything this tool can do to a photograph is
+   reachable, and none of it is VISIBLE: `palette`, `flow` and `reference` are three
+   dropdowns of names, and a name is only a name until you have seen what it does. The
+   strip answers that the only way it can be honestly answered -- by painting the
+   visitor's own photograph in each look and putting the results in a row.
+
+   It is a chooser, not a gallery, so every rule here is about staying subordinate to the
+   picture above it: one row, horizontally scrolled rather than wrapped (a second row of
+   thumbnails starts to compete with the painting), and no motion of any kind -- a
+   placeholder that pulses is eight things flashing under a picture somebody is judging
+   colour by, and it would need a reduced-motion escape it does not deserve.
+
+   `scrollbar-width:thin` and the fade are the two halves of "there is more to the right":
+   the fade says so at a glance and the scrollbar is what you actually grab. */
+.looks{position:relative;margin:0 0 14px}
+.looks .lkrow{display:flex;gap:9px;overflow-x:auto;padding:2px 2px 8px;
+  scrollbar-width:thin;scroll-behavior:smooth}
+.looks .lkcap{font:600 9.5px/1 ui-sans-serif,system-ui,sans-serif;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--dim);margin:0 0 7px}
+/* The right-hand fade, so a strip that continues past the fold says so. `to right` from
+   transparent, pinned over the scroller and off the pointer -- it must never eat a click
+   meant for the last thumbnail under it. */
+.looks::after{content:'';position:absolute;right:0;bottom:8px;top:22px;width:34px;
+  pointer-events:none;background:linear-gradient(to right,rgba(244,242,236,0),var(--bg))}
+/* A thumbnail is a BUTTON, not a div with a click handler: it is in the tab order, it
+   takes Enter and Space for free, and a screen reader is told what it is. */
+.lk{flex:none;padding:0;border:1px solid var(--line);border-radius:8px;background:#fff;
+  cursor:pointer;overflow:hidden;display:flex;flex-direction:column;width:118px;
+  text-align:left}
+.lk:hover{border-color:var(--accent);color:var(--fg)}
+.lk canvas{display:block;width:100%;height:78px;object-fit:cover;background:#e8e3d8}
+.lk .lknm{font:600 10.5px/1.25 ui-sans-serif,system-ui,sans-serif;padding:5px 7px 6px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* THE ONE THAT IS ON. A tinted name bar rather than a border swap, because the border is
+   already doing hover and the thing being reported is "this is the picture you are
+   looking at" -- which belongs next to the name, not around the image. */
+.lk.on{border-color:var(--accent)}
+.lk.on .lknm{background:var(--accent);color:#fff}
+/* Not yet painted. Dim, and NOT disabled: clicking a look whose thumbnail has not arrived
+   applies it perfectly well -- the strip is a chooser and the queue is a convenience, so
+   making the visitor wait for a picture in order to ask for the picture would be the
+   feature working against itself. */
+.lk.pend canvas{opacity:.4}
+.lk.pend .lknm{color:var(--dim)}
+
 #err{color:var(--warn);font-size:12px;white-space:pre-wrap;font-family:var(--mono);margin-bottom:10px}
 
 /* ---- control cards ------------------------------------------------------------
@@ -431,6 +516,101 @@ button.on:hover{filter:brightness(1.08);color:#fff}
 .row.show-hint .hint{display:block}
 
 footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26px}
+
+/* ---- the app shell -------------------------------------------------------------------
+   THE STACKED LAYOUT WASTES A PC SCREEN THREE WAYS, and only one of them is obvious.
+
+     - `sizeWipe` caps the picture at 62vh, so on any landscape frame the HEIGHT decides
+       the WIDTH. Measured on a 1205x882 window with a 1.3 frame: the stage is 1150 wide
+       and the picture uses 733 of it. 420px of empty surface, 37% of the stage, produced
+       by a height cap that was chosen for a layout where the panel sat underneath.
+     - `.shell` stops at 1180px, so a 2560px monitor donates another 1380 to the margins.
+     - the cards are a page below the picture. The sticky stage keeps the viewer on screen
+       while they are reached, but the panel still only ever gets the leftovers.
+
+   The comment on `.cards` rejects a side panel because "the panel was taller than the
+   picture it controls". That was true and it is no longer the objection it was: it holds
+   only while the panel and the picture share ONE scroll context. Give the panel its own
+   and its height stops being a layout fact at all -- which is the whole content of every
+   docked properties rail in Photoshop, Lightroom and Illustrator.
+
+   So at a wide enough window this becomes an application rather than a document: the page
+   itself does not scroll, the canvas fills what is left after the rail, and the rail
+   scrolls alone. Below that threshold nothing changes -- `.pane` and `.rail` lay out as
+   the plain blocks they are, in the order the page always had.
+
+   WHY A CLASS AND NOT A MEDIA QUERY. The threshold has to be known in two places -- the
+   layout, and sizeWipe, which sizes the picture from what the rail leaves -- and a number
+   written twice is a number that will disagree with itself. `shellSync` owns it, tests it
+   with matchMedia and stamps `body.shell`; every rule below keys on the stamp. */
+body.shell{height:100dvh;overflow:hidden;display:flex;flex-direction:column}
+body.shell .shell{flex:1;min-height:0;max-width:none;padding:10px 14px 0;
+  display:grid;grid-template-columns:1fr 7px var(--rail,340px);
+  grid-template-rows:auto 1fr;column-gap:0;row-gap:8px}
+/* THREE COLUMNS: a panel, the picture, a panel -- Lightroom's shape rather than
+   Photoshop's, because there are two things here that want to be permanently visible and
+   they answer different questions. Explicit `grid-column` on every child, so the DOM order
+   can stay the one the stacked layout needs: `#leftRail` sits AFTER `.pane` in the markup
+   (nothing about Allocation belongs above the picture when the page is one column) and is
+   placed into the first column here. */
+body.shell.lrail .shell{grid-template-columns:var(--lrail,280px) 7px 1fr 7px var(--rail,340px)}
+body.shell.lrail .leftrail{grid-column:1;grid-row:2}
+body.shell.lrail .gripL{grid-column:2;grid-row:2}
+body.shell.lrail .pane{grid-column:3;grid-row:2}
+body.shell.lrail .grip{grid-column:4;grid-row:2}
+body.shell.lrail .rail{grid-column:5;grid-row:2}
+/* Same scroll contract as the right rail, and the same reason for `min-height:0`. */
+body.shell.lrail .leftrail{min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;
+  padding:0 2px 20px;scrollbar-width:thin}
+/* Outside three-column mode the left rail is an empty div and its grip is nothing at all --
+   the card it would have held is back in the right rail, where the markup puts it. */
+.leftrail{display:none}
+body.shell.lrail .leftrail{display:block}
+body.shell .gripL{display:none}
+body.shell.lrail .gripL{display:block}
+/* The header spans both columns and stops being a page heading: in an application it is a
+   title bar, so it gives up its vertical space rather than its identity. */
+body.shell header{grid-column:1/-1;margin:0;padding:0 0 2px}
+body.shell h1{font-size:15px}
+/* `min-height:0` on BOTH panes, and it is not optional: a grid item's default `min-height`
+   is `auto`, which is "as tall as my content", so a rail full of cards would push the row
+   past the viewport and take the canvas with it -- the page would scroll again and the
+   whole change would have bought nothing. */
+body.shell .pane{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
+body.shell .rail{min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;
+  padding:0 2px 20px;scrollbar-width:thin}
+/* THE CANVAS TAKES WHAT IS LEFT. `flex:1` with `min-height:0` for the reason above, and
+   `min-height` dropped from its stacked value of 280px -- a floor written for a page that
+   could grow downwards becomes an overflow in a pane that cannot. */
+body.shell .stage{flex:1;min-height:0;position:static;box-shadow:none;margin:0}
+/* Everything else in the pane keeps its own height and gives the rest to the picture. */
+body.shell .toolbar,body.shell .tstrip,body.shell .looks,body.shell #stats{flex:none}
+body.shell .toolbar{margin:8px 0 6px}
+body.shell .toolbar.minor{margin:0 0 6px}
+body.shell .looks{margin:8px 0 0}
+/* The strips can be tall -- the layers one carries a list -- so they are allowed to scroll
+   inside themselves rather than squeezing the picture to nothing. */
+body.shell .tstrip{max-height:20vh;overflow-y:auto}
+/* One column in a 340px rail comes free from the existing auto-fit, and two come free if
+   the grip is dragged wide enough to hold them. Only the gap needs saying. */
+body.shell .rail .cards{gap:10px}
+body.shell .adv{margin-top:10px}
+/* A footer is part of the site's contract, so it is kept and made a strip rather than
+   dropped: outside `.shell` in the DOM, and outside the scroll of either pane. */
+body.shell footer{flex:none;padding:5px 14px 7px;font-size:10.5px;
+  border-top:1px solid var(--line)}
+
+/* The grab handle. Invisible until it is wanted: a 7px column that reads as a seam, and
+   picks up the accent while it is being used. `touch-action:none` because a pointer drag
+   on a narrow target is otherwise claimed by the browser's own scroll gesture. */
+.grip{display:none}
+body.shell .grip{display:block;cursor:col-resize;touch-action:none;
+  background:linear-gradient(to right,transparent 3px,var(--line) 3px,var(--line) 4px,
+                             transparent 4px)}
+body.shell .grip:hover,body.shell .grip.on{
+  background:linear-gradient(to right,transparent 2px,var(--accent) 2px,var(--accent) 5px,
+                             transparent 5px)}
+
 /* The site's design contract: every transition and animation is switched off here. The ring stops spinning but keeps its
    coloured arc, and the stage label and clock carry the state on their own -- so the
    busy indicator still communicates without motion rather than disappearing. */
@@ -448,6 +628,12 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26p
     <span class="sub">research tool &middot; runs the real <span style="font-family:var(--mono)">oilpaint</span> pipeline in your browser</span>
   </header>
 
+  <!-- TWO PANES, and in the stacked layout they are two plain divs in the order the page
+       always had. `.pane` is everything about the PICTURE -- the viewer, the toolbar, the
+       tool strips, the looks -- and `.rail` is everything about the PARAMETERS. Wrapping
+       rather than reordering is the point: at narrow widths `.shell` is `display:block`,
+       the wrappers lay out as blocks, and the result is exactly today's page. -->
+  <div class="pane">
   <div class="stage">
     <div id="drop">
       <b>Drop an image here</b>, or click to choose one. You can paste one too.<br>
@@ -535,6 +721,7 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26p
     <span class="fovnum" id="vtxCount">0</span>
     <button id="vtxArm" hidden>Use starry</button>
     <label class="tog"><input type="checkbox" id="vtxShow" checked><span>show</span></label>
+    <button id="vtxUndo" disabled>Undo</button>
     <button id="vtxClear">Clear</button>
     <span id="vtxFor"></span>
     <span class="fovhint" id="vtxHint"></span>
@@ -566,6 +753,7 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26p
     <span class="fovnum" id="fovStrengthV">0.00</span>
     <span class="tsep"></span>
     <label class="tog"><input type="checkbox" id="fovShow" checked><span>show</span></label>
+    <button id="fovUndo" disabled>Undo</button>
     <button id="fovClear">Clear</button>
     <span class="fovhint" id="fovHint">Paint where the eye should go &mdash; darker means more
       strokes. The budget is <em>redistributed</em>, never increased, so lower the
@@ -611,19 +799,71 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26p
     <span class="tsep"></span>
     <label class="tog"><input type="checkbox" id="rgnShow" checked><span>show</span></label>
     <button id="rgnSave" title="Write the mask as a PNG. This is the file scripts/paint.py --regions reads.">Save mask</button>
+    <button id="rgnUndo" disabled>Undo</button>
     <button id="rgnClear" title="Delete every layer and wipe the mask.">Delete all</button>
-    <span id="rgnEditing"></span>
-    <div id="rgnLayers"></div>
-    <span class="fovhint" id="rgnHint"></span>
+  </div>
+  <!-- EIGHT PICTURES INSTEAD OF FORTY IDENTIFIERS. Each is the visitor's own photograph
+       painted in one named look, computed in the background on a second engine (see
+       LOOKS), so the question "what is `nocturne`" is answered by a nocturne rather than
+       by a word in a dropdown. Hidden until there is an image to paint. -->
+  <div class="looks" id="looks" hidden>
+    <div class="lkcap">Looks</div>
+    <div class="lkrow" id="lkRow"></div>
   </div>
   <div id="err"></div>
   <div id="stats" hidden></div>
+  </div><!-- /.pane -->
 
+  <!-- THE LEFT RAIL, and it is Lightroom's shape rather than Photoshop's: a panel, the
+       picture, a panel. `Allocation` is the card that decides how many strokes there are
+       and where they go -- the most structural thing on the page and the one you return to
+       between every look -- so it earns a side of its own rather than a place in the queue
+       above Palette and Flow.
+
+       IT IS THE SAME `#leftCards` NODE IN BOTH LAYOUTS, moved rather than duplicated. A
+       second copy would be a second control surface for the same fields, which is the
+       thing schema.py exists to prevent; and building it into one place or the other at
+       boot would mean a window dragged across the threshold kept a rail that no longer
+       fits. `railsSync` moves the one node, and its home in the markup is the right rail --
+       so stacked, and on any window too narrow for three columns, the page is exactly what
+       it was. -->
+  <div class="leftrail" id="leftRail"></div>
+  <div class="grip gripL" id="railGripL" role="separator" aria-orientation="vertical"
+       aria-label="Resize the allocation panel"></div>
+
+  <!-- The grab handle between the panes. A real element rather than a CSS resizer because
+       the width it sets (`--rail`) has to be readable by sizeWipe: the picture is sized
+       from what is LEFT, so a drag that the layout knew about and the arithmetic did not
+       would leave the viewer the wrong size until the next window resize. -->
+  <div class="grip" id="railGrip" role="separator" aria-orientation="vertical"
+       aria-label="Resize the controls"></div>
+
+  <div class="rail">
+  <!-- THE LAYER LIST IS A PANEL, NOT A STRIP. It lived in the Layers bar above the canvas,
+       where the list, the readout and three lines of prose came to ~170px of the one thing
+       the page is for -- so arming the tool that needs the picture most was what shrank the
+       picture most. That is Photoshop's own split and it is right for the same reason: the
+       tool OPTIONS (fill or brush, erase, size) belong beside the canvas because they
+       describe the next click, and the LAYER LIST belongs in a docked panel because it
+       describes the document. Here the rail already scrolls, so a list of any length now
+       costs the canvas nothing at all.
+
+       It also lands where it should have been: `#rgnEditing` says which layer the Palette
+       and Flow rows write to, and it is now directly above those rows instead of a
+       screenful away from them. -->
+  <section class="card" id="lyrPanel" hidden>
+    <h2>Layers <em id="lyrCount"></em></h2>
+    <span id="rgnEditing"></span>
+    <div id="rgnLayers"></div>
+    <div class="csub" id="rgnHint"></div>
+  </section>
+  <div class="cards" id="leftCards"></div>
   <div class="cards" id="cards"></div>
   <details class="adv" id="adv">
     <summary><span class="advlabel">Advanced settings</span><em id="advCount"></em></summary>
     <div class="cards" id="advCards"></div>
   </details>
+  </div><!-- /.rail -->
 </div>
 
 <footer>&copy; 2026 Mingyang Song &middot; All rights reserved.</footer>
@@ -849,6 +1089,13 @@ function renderWidth(){
 // `flat_theta_deg` would hide the feature from everyone who does not already know it is
 // there. Every other group stays folded.
 const FRONT_GROUPS = ['Allocation', 'Palette', 'Flow'];
+// ...and which of them gets the other side of the picture. `Allocation` decides how many
+// strokes there are and where they go, which is the most structural choice on the page and
+// the one you come back to between every look -- so on a window wide enough for three
+// columns it is given a rail rather than a place in the queue above Palette and Flow.
+// A name that goes stale here degrades to "the card stays in the right rail", which is the
+// layout the page had, rather than to a card that vanishes.
+const LEFT_GROUPS = ['Allocation'];
 
 // Picture tools that belong to ONE control rather than to the toolbar. The swirl centres
 // are a property of the flow field, so the button sits under the `flow` row: where you are
@@ -925,6 +1172,25 @@ const FINE = {
   Flow: ['flow_coh', 'flow_scale', 'flow_rot', 'flow_drift'],
 };
 const FINE_CARD = name => `${name} · fine`;
+// ...AND THE MIRROR OF IT. FINE demotes a field out of a front card; this promotes one in,
+// and it exists because the schema's groups are the ENGINE's filing and the front row is a
+// question about attention, which is not the same question.
+//
+// `color_jitter` is the case that forced it. It is filed under Irregularity, and every
+// other field in that group -- size_sigma, wobble_amp, drop_p, bristle_amp, fringe_px --
+// varies a stroke's SHAPE. It is the one that varies its COLOUR, so it sits three folds
+// deep under a heading that describes its neighbours rather than itself, while the card it
+// actually belongs on is on the front row. schema.py's own help admits the relation from
+// the other side: broken_color's line reads "Unlike color_jitter this is a STRUCTURED
+// alternation", which is a comparison a visitor can only make with both rows in front of
+// them.
+//
+// The group is NOT renamed to do this. `--color-jitter` is an irregularity control on the
+// command line, in scripts/paint.py's help and in every saved setup, and moving a field
+// between groups to move a row between cards would be the page editing the engine's
+// vocabulary to suit its own layout. A card is a place to look; a group is what the thing
+// is. This maps one to the other and leaves both alone.
+const PROMOTE = {color_jitter: 'Palette'};
 // ONE LINE UNDER EACH CARD HEADING. A group name is a filing decision -- it says which
 // drawer a control is in, not what the drawer is for -- and seven of them in a column is
 // the point at which a panel stops explaining itself. The text comes from the ENGINE
@@ -987,12 +1253,17 @@ async function boot(restore = true){
   // captured region grades the picture whatever the panel says.
   regionLayers = rgnAdopt(saved && saved.regions);
   regionSel = [0];
-  const host = $('#cards'), adv = $('#advCards');
-  host.innerHTML = ''; adv.innerHTML = '';
+  const host = $('#cards'), adv = $('#advCards'), left = $('#leftCards');
+  host.innerHTML = ''; adv.innerHTML = ''; left.innerHTML = '';
   const groups = [];
   for(const c of SCHEMA){
     if(HIDDEN.includes(c.name)) continue;        // no control at all, see above
-    const gname = (FINE[c.group] || []).includes(c.name) ? FINE_CARD(c.group) : c.group;
+    // Promotion is tested FIRST: a promoted field leaves its group outright, so asking
+    // whether it is one of that group's demoted trims is a question about a card it is no
+    // longer on. The two maps cannot both claim a field, and this is what makes that true
+    // rather than merely unlikely.
+    const gname = PROMOTE[c.name] ? PROMOTE[c.name]
+                : (FINE[c.group] || []).includes(c.name) ? FINE_CARD(c.group) : c.group;
     let g = groups.find(x => x.name === gname);
     if(!g){ g = {name: gname, items: []}; groups.push(g); }
     g.items.push(c);
@@ -1020,7 +1291,11 @@ async function boot(restore = true){
   // hidden and the front row is empty.
   let front = FRONT_GROUPS.map(n => groups.find(g => g.name === n)).filter(Boolean);
   if(!front.length) front = groups.slice(0, 1);
-  front.forEach(g => host.appendChild(mkCard(g.name, g.items, true)));
+  // Built into `#leftCards` or `#cards` by NAME, and then `railsSync` decides where that
+  // container hangs. Splitting it this way is what keeps "which card is on the left" a
+  // one-line list rather than a thing the layout code has to know about cards at all.
+  front.forEach(g => (LEFT_GROUPS.includes(g.name) ? left : host)
+    .appendChild(mkCard(g.name, g.items, true)));
 
   let nAdv = 0;
   // The demoted trims first, so a visitor who opens Advanced looking for the rest of the
@@ -1033,6 +1308,9 @@ async function boot(restore = true){
   }
   $('#advCount').textContent = nAdv;
   applyHints();
+  // After the cards, because `looksMark` reads `params` and the strip's selected state has
+  // to agree with the rows the panel has just drawn.
+  looksBuild();
   rgnLayersBuild(); rgnSyncRows();
   setStatus(haveImage ? '' : 'Waiting for an image.');
   // Last, and only if the visitor has not already dropped something while the engine was
@@ -1185,6 +1463,10 @@ function set(name, val){
   }
   params[name] = val;
   publishSetup();
+  // A look is only "the one you are on" while every field it sets still says what it set.
+  // Moving any of them by hand takes the picture off the look, and the strip has to stop
+  // claiming otherwise -- so this follows the write rather than the click.
+  looksMark();
   // The swirl tool's hint depends on which flow field is selected -- whether it has any
   // vortices to place at all -- so the panel changing has to refresh it.
   if(name === 'flow') vtxStatus();
@@ -1299,6 +1581,10 @@ async function render(opts){
     publishSetup();          // so a reload (and the CLI's --spec) gets what is on screen
     $('#dl').disabled = false;
     setStatus(draft ? 'draft — refining…' : '');
+    // The strip is queued off a FINISHED, full-width render and never off a draft: a
+    // draft is what the visitor sees while still dragging, and eight background paintings
+    // started there would be thrown away by the next drag before any of them arrived.
+    if(!draft) thumbsMaybeStart();
     if(draft){
       clearTimeout(refineTimer);
       // Hold the overlay across the gap between draft and refine, relabelled. Letting it
@@ -1659,24 +1945,169 @@ function maskHit(c, e){
 /** Panes across the box: 2 in split view, 1 otherwise. */
 const paneScale = () => $('#wipe').classList.contains('split') ? 2 : 1;
 
+// THE ONE PLACE THE SHELL'S THRESHOLD IS WRITTEN. It is needed by the layout and by
+// sizeWipe -- which sizes the picture from what the rail leaves -- and a breakpoint written
+// once in CSS and once here is a breakpoint that will disagree with itself at exactly one
+// window size, which is the width nobody tests at. So there is no media query for the
+// shell: this tests it, `shellSync` stamps `body.shell`, and every rule keys on the stamp.
+const SHELL_Q = '(min-width:1100px) and (min-height:640px)';
+// THE THREE-COLUMN THRESHOLD, and it is a separate number because it is a separate
+// question. The shell asks "is there room to dock a panel"; this asks "is there room to
+// dock TWO and still have a picture between them". 1360 is that sum written out: 280 for
+// the left rail, 340 for the right, 14 of padding either side and two 7px grips leaves
+// ~698 for the canvas, which is about what the whole pane gets on a 1100px window today.
+// Below it the Allocation card simply stays in the right rail, which is the layout that
+// was already there -- so this can only ever add a column, never take a card away.
+const LSHELL_Q = '(min-width:1360px) and (min-height:640px)';
+// Guarded because the DOM shim in index_node.mjs is a shim: a page that threw here would
+// take the whole harness down, and a page that cannot ask degrades to the stacked layout,
+// which is the one that works everywhere.
+const mq = q => {
+  try{ return !!(window.matchMedia && window.matchMedia(q).matches); }
+  catch(e){ return false; }
+};
+const shellMode = () => mq(SHELL_Q);
+// Two rails need the shell as well as the width: the left rail is a grid column, and there
+// is no grid to put it in until the shell is on.
+const leftRailMode = () => shellMode() && mq(LSHELL_Q);
+
+/** Move the Allocation container to whichever side the window can afford, and stamp the
+ *  layout. One node, moved -- never copied, and never rebuilt: the cards inside it carry
+ *  live listeners and a rebuild here would silently detach every one of them. */
+function railsSync(){
+  const box = $('#leftCards'), left = $('#leftRail'), rail = $('.rail'), cards = $('#cards');
+  if(!box || !left || !rail || !cards) return;
+  const want = leftRailMode() ? left : rail;
+  if(box.parentNode === want) return;
+  // Into the right rail it goes back ABOVE the other cards, which is where Allocation sits
+  // in FRONT_GROUPS -- so a window narrowed past the threshold gives back exactly the
+  // one-rail page rather than a reshuffled one.
+  if(want === rail) rail.insertBefore(box, cards); else left.appendChild(box);
+}
+
+function shellSync(){
+  document.body.classList.toggle('shell', shellMode());
+  document.body.classList.toggle('lrail', leftRailMode());
+  railsSync();
+  sizeWipe();
+}
+
 // Size the wipe box so the whole picture fits without scrolling the controls away. Both
 // layers share this box, so the clip stays aligned by construction.
 function sizeWipe(){
   const el = $('#wipe');
   if(el.hidden) return;
-  const avail = $('.stage').clientWidth - 28;
-  const maxH = Math.max(240, window.innerHeight * 0.62);
+  const stage = $('.stage');
+  const avail = (stage.clientWidth || 0) - 28;
+  // THE BOUND COMES FROM A DIFFERENT PLACE IN EACH LAYOUT, and that is the whole change.
+  // Stacked, the stage grows with its content and so cannot bound anything -- the viewport
+  // does, at the 62vh that leaves room to scroll to the cards. In the shell the stage is a
+  // flex child with a real height already decided for it, so its OWN box is the bound and
+  // the picture simply fills what the rail and the strips left. That is what turns 420px of
+  // empty surface into picture.
+  //
+  // There is no feedback loop in reading it: `.stage` is `flex:1;min-height:0`, so its size
+  // is the leftover of the pane and does not depend on the child this function resizes.
+  const maxH = shellMode()
+    ? Math.max(160, (stage.clientHeight || 0) - 28)
+    : Math.max(240, window.innerHeight * 0.62);
   // The height bound is on a PANE, not on the box: two panes side by side may be twice as
   // wide before either of them is too tall. Without the factor the split view would show
   // two half-size pictures in a box sized for one full-size one.
   el.style.width = Math.min(avail, paneScale() * maxH * aspect) + 'px';
+}
+
+// Stamped once at load, and again whenever the window crosses the threshold. matchMedia's
+// own `change` event is what catches a crossing that `resize` does not report -- a screen
+// rotated, a display swapped, a browser zoom step -- and it is guarded for the same reason
+// `shellMode` is.
+shellSync();
+try{
+  const mq = window.matchMedia && window.matchMedia(SHELL_Q);
+  if(mq && mq.addEventListener) mq.addEventListener('change', shellSync);
+}catch(e){}
+
+// A rail's width, dragged. Parameterised over the two of them rather than written twice:
+// the only thing that differs is WHICH WAY widens, and a copy would be the place the two
+// clamps quietly drift apart.
+//
+// The width is a CSS custom property and not an inline width, so the grid owns the layout
+// and this owns one number -- and so `sizeWipe` can read back what the picture was actually
+// left with after each move.
+const RAIL_MIN = 260, RAIL_MAX = 640;
+// The left rail holds one card and can afford to be narrower than the right, which holds
+// three plus Advanced. 210 is a little under the 258 a card asks for, so it can be pushed
+// tighter than comfortable when the picture matters more -- which is the point of a grip.
+const LRAIL_MIN = 210, LRAIL_MAX = 520;
+function railDrag(gripId, prop, dir, min, max, dflt){
+  const grip = $(gripId);
+  if(!grip) return;
+  let from = 0, at = 0;
+  const width = () => {
+    const v = parseFloat(getComputedStyle(document.documentElement)
+      .getPropertyValue(prop));
+    return isNaN(v) ? dflt : v;
+  };
+  grip.addEventListener('pointerdown', e => {
+    if(!shellMode()) return;
+    grip.setPointerCapture(e.pointerId);
+    grip.classList.add('on');
+    from = e.clientX; at = width();
+    e.preventDefault();
+  });
+  grip.addEventListener('pointermove', e => {
+    if(!grip.classList.contains('on')) return;
+    // `dir` is which way widens: the right rail is anchored to the right of the window, so
+    // dragging LEFT makes it wider and the delta is subtracted; the left rail is anchored
+    // to the left and the sign flips.
+    const w = Math.max(min, Math.min(max, at + dir * (e.clientX - from)));
+    document.documentElement.style.setProperty(prop, w + 'px');
+    sizeWipe();
+  });
+  const end = e => {
+    if(!grip.classList.contains('on')) return;
+    grip.classList.remove('on');
+    try{ grip.releasePointerCapture(e.pointerId); }catch(err){}
+    // The picture's box has changed, and with it the width the painting should be computed
+    // at -- through the same 20% test a window resize uses, and for the same reason: a
+    // render is seconds and a drag fires continuously.
+    sizeWipe();
+    if(haveImage && lastWidth){
+      const w = renderWidth();
+      if(Math.abs(w - lastWidth) / lastWidth > 0.2) render();
+    }
+  };
+  grip.addEventListener('pointerup', end);
+  grip.addEventListener('pointercancel', end);
+}
+railDrag('#railGrip', '--rail', -1, RAIL_MIN, RAIL_MAX, 340);
+railDrag('#railGripL', '--lrail', 1, LRAIL_MIN, LRAIL_MAX, 280);
+
+// Opening a tool strip, or the looks strip arriving, changes what is left for the picture
+// -- and neither fires `resize`. Observing the stage catches every one of them without a
+// list of "things that change the layout" to grow a missing entry. Guarded: the shim has no
+// ResizeObserver, and the stacked layout does not need one.
+if(typeof ResizeObserver !== 'undefined'){
+  let lw = -1, lh = -1;
+  const ro = new ResizeObserver(() => {
+    const st = $('.stage');
+    if(!st) return;
+    // Only on a REAL change, so the observation this function's own write provokes stops
+    // here rather than going round again.
+    if(st.clientWidth === lw && st.clientHeight === lh) return;
+    lw = st.clientWidth; lh = st.clientHeight;
+    sizeWipe();
+  });
+  try{ ro.observe($('.stage')); }catch(e){}
 }
 // Resizing the window changes the box, and with it the resolution the painting should be
 // computed at. Re-render only when the change is big enough to see -- a render is seconds
 // of CPU, and a resize fires continuously while a window is dragged.
 let resizeTimer = null;
 window.addEventListener('resize', () => {
-  sizeWipe();
+  // shellSync, not sizeWipe: a window dragged across the threshold has to change LAYOUT and
+  // not only the picture's box, and resize is the event that crosses it.
+  shellSync();
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     if(!haveImage || !lastWidth) return;
@@ -1943,8 +2374,11 @@ function vtxToggle(fx, fy){
     const [fx, fy] = maskFrac(c, e);
     // A drag is not a click. Without this, grabbing the wipe divider through this layer
     // would drop a vortex wherever the pointer was released.
+    // Inside the drag test, not before it: a snapshot taken on every pointerup would fill
+    // the stack with entries for gestures that placed nothing -- and the divider drag this
+    // test exists to reject is the commonest of them.
     if(Math.hypot(fx - down[0], fy - down[1]) < 0.01
-       && fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1) vtxToggle(fx, fy);
+       && fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1){ undoSnap('vtx'); vtxToggle(fx, fy); }
     down = null;
   });
   c.addEventListener('pointercancel', () => { down = null; });
@@ -2010,6 +2444,7 @@ $('#showStats').addEventListener('change', () => {
 $('#vtxClear').addEventListener('click', () => {
   const t = vtxTarget();
   if(!vtxOwn(t).length) return;
+  undoSnap('vtx');
   delete vortices[t];
   vtxDraw(); vtxStatus(); publishSetup(); schedule();
 });
@@ -2199,6 +2634,9 @@ function dab(x, y){
     e.stopPropagation(); e.preventDefault();
     const p = maskHit(c, e);
     if(!p) return;                     // the letterbox beside the picture, in full screen
+    // BEFORE the first dab, so the whole stroke is one entry: the dabs that follow are
+    // already inside the state this recorded.
+    undoSnap('fov');
     c.setPointerCapture(e.pointerId);
     brushing = true; last = null;
     stroke(...p);
@@ -2303,7 +2741,7 @@ function fovSyncStrength(){
 
 $('#fovBtn').addEventListener('click', () => fovMode($('#fovBar').hidden));
 $('#fovShow').addEventListener('change', () => fovMode(!$('#fovBar').hidden));
-$('#fovClear').addEventListener('click', () => { maskClear(); schedule(); });
+$('#fovClear').addEventListener('click', () => { undoSnap('fov'); maskClear(); schedule(); });
 $('#fovSize').addEventListener('input', e => { $('#fovSizeV').textContent = e.target.value; });
 // Paint or wipe is what the click DOES, so it leads the strip and it changes the sentence
 // on the picture. The checkbox is unchanged underneath -- only its skin and its place.
@@ -2606,7 +3044,7 @@ function rgnRow(id){
   if(id === 0){ del.style.visibility = 'hidden'; del.disabled = true; }
   else {
     del.title = 'delete this layer -- its pixels go back to the base';
-    del.addEventListener('click', e => { e.stopPropagation(); rgnDelete(id); });
+    del.addEventListener('click', e => { e.stopPropagation(); undoSnap('rgn'); rgnDelete(id); });
   }
   // The whole row selects, which is what a layers panel does. shift/ctrl/meta extends.
   row.addEventListener('click', e => rgnSelect(id, !!(e.shiftKey || e.ctrlKey || e.metaKey)));
@@ -2676,6 +3114,7 @@ function rgnStatus(){
     : 'Palette and Flow rows edit the <b>whole picture</b>';
   $('#rgnEditing').style.borderColor = (rgnEditingLayers() && regionSel.length === 1)
     ? rgnCss(regionSel[0]) : 'var(--line)';
+  lyrPanelSync();
   // Selecting a layer re-aims the swirl tool as well as the panel's rows: one selection,
   // one target, across every tool that acts on the picture. A handful of markers, so the
   // redraw is free and doing it here means there is one place that answers "the selection
@@ -3011,7 +3450,27 @@ function rgnMode(on, keep){
   // its own bar. See vtxMode.
   if(!on && !keep && rgnEditingLayers()) rgnSelect(0, false);
   if(on) rgnStatus();
+  // Arming and disarming both change whether the panel is wanted, and neither necessarily
+  // reaches rgnStatus: closing the tool with the Base already selected takes neither branch
+  // above. So the panel is synced here as well, which is cheap and cannot be missed.
+  lyrPanelSync();
   toolState();
+}
+
+/** Whether the docked Layers panel is wanted, and what it is called.
+ *
+ *  It shows while the tool is ARMED -- `+ New layer` needs somewhere for its layer to
+ *  appear -- and it also shows whenever any layer EXISTS, tool or no tool. That second half
+ *  is the one worth stating: the selection is what re-points the Palette and Flow rows, and
+ *  those rows are live whether or not a paint tool happens to be open. A panel that vanished
+ *  with the tool would take the only control over where they write with it, and hide the
+ *  readout that answers "where is this slider going" exactly while it is still true. */
+function lyrPanelSync(){
+  const p = $('#lyrPanel');
+  if(!p) return;
+  const n = Math.max(0, (regionRows || []).length - 1);   // the Base is not a layer
+  p.hidden = !($('#rgnBar').hidden === false || n > 0);
+  $('#lyrCount').textContent = n ? String(n) : '';
 }
 
 (function regionTool(){
@@ -3026,6 +3485,10 @@ function rgnMode(on, keep){
     e.stopPropagation(); e.preventDefault();
     const p = maskHit(c, e);
     if(!p) return;                     // the letterbox beside the picture, in full screen
+    // A brush stroke and a fill are one edit each, and both are recorded here rather
+    // than inside their own paths -- this is the single place that knows a gesture is
+    // starting, and rgnPutter cannot tell a stroke's first dab from its four hundredth.
+    undoSnap('rgn');
     if(rgnIsBrush()){ c.setPointerCapture(e.pointerId); rgnBrushDown(...p); }
     else rgnFill(...p);
   });
@@ -3077,6 +3540,8 @@ $('#rgnAdd').addEventListener('click', () => {
   setStatus(`layer ${id} \u2014 click a passage of the picture to give it some paint`);
 });
 $('#rgnClear').addEventListener('click', () => {
+  // The one edit on this page that can throw away an afternoon's work in a click.
+  undoSnap('rgn');
   if(regionCtx) regionCtx.clearRect(0, 0, regionCanvas.width, regionCanvas.height);
   regionLayers = {}; regionSel = [0]; regionKey++; regionCounts = null;
   regionPresent = new Set();
@@ -3154,10 +3619,390 @@ function upload(f, restoring = false){
     drop.hidden = true; $('#wipe').hidden = false;
     $('#clearTop').disabled = false;
     haveImage = true; sizeWipe(); window.wipeReset();
+    // The strip appears with the IMAGE, not with the first finished render. Its thumbnails
+    // are queued off a render (see thumbsMaybeStart), and with `auto` off there may not be
+    // one for a long time -- so gating the strip on that would hide the whole feature in
+    // exactly the mode where a visitor most wants to choose a look before paying for a
+    // full-res paint. Empty and pending is the honest state, and it is a state that says
+    // what is coming.
+    if(!looksOff) $('#looks').hidden = false;
     setStatus('');
     render();
   };
   fr.readAsDataURL(f);
+}
+
+// ---- undo, for the three tools that make marks -------------------------------------------
+//
+// A BRUSH WITHOUT UNDO IS A BRUSH PEOPLE USE TENTATIVELY. Every mark-making tool on this
+// page wrote into a canvas with exactly one way back -- `Clear`, which throws away the
+// whole map -- so the cost of a misjudged stroke was the entire mask, and the cost of a
+// misjudged `Delete all` was every layer. That is not a missing convenience: it changes how
+// the tools are used, because the honest response to an irreversible edit is to make fewer
+// and smaller ones, in the one part of the page that exists to be experimented with.
+//
+// ONE HISTORY FOR THE PICTURE, not one per tool. The tools are mutually exclusive and a
+// visitor thinks "undo my last mark", not "undo my last mark in this tool" -- and per-tool
+// stacks produce the case nobody can explain, where Undo is dimmed in the strip you have
+// open while the mark you just made is still on screen. The cost of sharing is that the
+// button can undo something made with a different tool, which is why the status line always
+// SAYS what came back rather than leaving it to be spotted.
+//
+// The snapshot is taken BEFORE the change, which is what makes a stroke one entry rather
+// than one per dab: `undoSnap` is called at pointerdown, and the hundreds of dabs that
+// follow are already inside the change it recorded.
+//
+// DEPTH IS BOUNDED BY MEMORY, NOT BY TASTE. A snapshot is a whole canvas -- the foveal map
+// at MASK_SIDE and the region mask at RGN_SIDE are each 512 on the long side, so ~700 KB of
+// RGBA per entry on a 3:2 frame. Sixteen is ~11 MB in the worst case of an all-canvas
+// stack, against a full-res render that already runs to hundreds of MB in the worker. The
+// swirl entries are a few hundred bytes and do not count.
+const UNDO_MAX = 16;
+const undoStack = [];
+
+/** A copy, not a view. `getImageData` hands back a fresh buffer in a browser, but saying so
+ *  here is what makes the snapshot's independence a property of this code rather than of
+ *  the platform -- and the DOM shim in index_node.mjs really does return a shared array,
+ *  so an aliasing bug would be invisible in the harness and real in the page. */
+function undoPixels(ctx, c){
+  const d = ctx.getImageData(0, 0, c.width, c.height);
+  return {data: new Uint8ClampedArray(d.data), w: c.width, h: c.height};
+}
+
+/** Record the state one edit is about to leave behind. `kind` is the surface, not the
+ *  gesture: a fill, a brush stroke and a Delete all are all 'rgn', because what has to come
+ *  back is the same three things however the pixels went in. */
+function undoSnap(kind){
+  let e = null;
+  if(kind === 'fov' && maskCtx && maskCanvas){
+    e = {kind, px: undoPixels(maskCtx, maskCanvas), what: 'the focus map'};
+  } else if(kind === 'rgn' && regionCtx && regionCanvas){
+    e = {kind, px: undoPixels(regionCtx, regionCanvas),
+         // The pixels are only half of a layer edit: `Delete all` and the row's own × take
+         // the LIST too, and a mask restored under an empty list is a picture full of
+         // passages no panel row can reach.
+         layers: JSON.parse(JSON.stringify(regionLayers || {})),
+         sel: regionSel.slice(), what: 'the layers'};
+  } else if(kind === 'vtx'){
+    e = {kind, pts: JSON.parse(JSON.stringify(vortices || {})), what: 'the swirl centres'};
+  }
+  if(!e) return;
+  undoStack.push(e);
+  while(undoStack.length > UNDO_MAX) undoStack.shift();
+  undoSync();
+}
+
+/** Put the top of the stack back. Each arm ends in the SAME call the tool itself ends in --
+ *  `maskTouched`, `rgnCommit`, the swirl redraw -- so an undo re-renders, re-saves and
+ *  re-scans by exactly the path a mark does, and there is no second version of "what an
+ *  edit owes" to fall out of step with the first. */
+function undoDo(){
+  const e = undoStack.pop();
+  if(!e) return;
+  if(e.kind === 'fov' && maskCtx){
+    maskCtx.putImageData(new ImageData(e.px.data, e.px.w, e.px.h), 0, 0);
+    maskTouched();
+  } else if(e.kind === 'rgn' && regionCtx){
+    regionCtx.putImageData(new ImageData(e.px.data, e.px.w, e.px.h), 0, 0);
+    regionLayers = e.layers;
+    regionSel = e.sel.length ? e.sel : [0];
+    rgnCommit(true, `undo — ${e.what} as they were`);
+    rgnSyncRows();
+  } else if(e.kind === 'vtx'){
+    vortices = e.pts;
+    vtxDraw(); vtxStatus(); publishSetup(); schedule();
+  }
+  // After the commit, which writes its own message: an undo that said nothing would be a
+  // button that looks broken whenever it restores something off screen -- and with one
+  // shared history that is exactly the case the visitor most needs told.
+  setStatus(`undo — ${e.what} as they were`);
+  undoSync();
+}
+
+/** The same button in all three strips, because it is the same history. Disabled is the
+ *  honest state for an empty stack: a live button that does nothing is the defect the
+ *  swirl tool's `off` styling exists to avoid one strip over. */
+function undoSync(){
+  const n = undoStack.length;
+  for(const id of ['#fovUndo', '#rgnUndo', '#vtxUndo']){
+    const b = $(id);
+    if(!b) continue;
+    b.disabled = n === 0;
+    b.title = n ? `Undo ${undoStack[n - 1].what} (Ctrl+Z)`
+                : 'Nothing to undo yet';
+  }
+}
+
+$('#fovUndo').addEventListener('click', undoDo);
+$('#rgnUndo').addEventListener('click', undoDo);
+$('#vtxUndo').addEventListener('click', undoDo);
+// The resting state is set HERE and not left to the `disabled` attribute in the markup.
+// Both give a dimmed button on load, but only this one is a property of the code: the
+// attribute is a fact about one line of HTML that nothing re-establishes, and it is
+// invisible to any harness that does not parse markup into its DOM.
+undoSync();
+// Ctrl+Z / Cmd+Z, on the window rather than on a canvas: the mark is on the picture but the
+// hand is often on a slider, and an undo that only works while the canvas has focus is one
+// that appears not to work. preventDefault stops the browser's own undo from also acting on
+// whatever field happens to be focused.
+window.addEventListener('keydown', e => {
+  if(!(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+  if(String(e.key).toLowerCase() !== 'z') return;
+  if(!undoStack.length) return;
+  e.preventDefault();
+  undoDo();
+});
+
+// ---- the looks strip -------------------------------------------------------------------
+//
+// WHAT A NAME IN A DROPDOWN CANNOT SAY. `palette`, `flow` and `reference` between them
+// carry every artistic decision this pipeline can make, and all three present as a list of
+// words: `nocturne`, `waterlily`, `great-wave`. A visitor who has not read palette.py has
+// no way to choose between them except to try each one a render at a time, and the panel
+// around those dropdowns is forty more identifiers. So the strip paints the visitor's OWN
+// photograph in each look and puts the results in a row -- the one form of the answer that
+// needs no vocabulary.
+//
+// A look is a BUNDLE, not a preset name: `Van Gogh` is a flow field, a palette and a
+// reference transport together, because that is what the three of them are for and no one
+// of them alone reads as the painter. Every look sets the SAME seven fields, which is what
+// `LOOK_OFF` is for -- a look that named only the fields it cared about would leave the
+// previous look's flow running underneath it, so clicking `Zorn` after `Van Gogh` would
+// give a Zorn palette combed into swirls and neither look would be what it claimed.
+const LOOK_OFF = {palette: 'none', palette_strength: 0.8, broken_color: 0.0,
+                  flow: 'none', flow_strength: 0.8,
+                  reference: 'none', reference_strength: 0.7};
+const LOOK_FIELDS = Object.keys(LOOK_OFF);
+const lookSet = o => Object.assign({}, LOOK_OFF, o);
+// THREE, AND THE COST IS THE REASON. Each thumbnail is an honest ~0.6 s painting at
+// THUMB_SIDE (see the constant for why it cannot be a thumbnail-sized number), so the strip
+// is the one feature here whose price is linear in how many entries it has. Eight was ~5 s
+// of a second core on every invalidation; three is under two. `zorn`, `nocturne`, `fauve`,
+// `impressionist` and `cezanne` are all still one click away in the Palette and Flow rows,
+// which is where a named preset has always lived -- what the strip buys is the DISCOVERY of
+// the idea, and two painters make that point as well as seven.
+//
+// `photo` earns its place differently from the other two: it is the way BACK. Without it,
+// leaving a look means setting palette, flow and reference to `none` by hand, three rows
+// apart -- or `Defaults`, which also throws away the geometry. It is the off switch, not an
+// eighth look.
+const LOOKS = [
+  {key: 'photo', name: 'Photograph', set: lookSet({})},
+  {key: 'vangogh', name: 'Van Gogh', set: lookSet(
+    {flow: 'starry', flow_strength: 0.85, palette: 'nocturne', palette_strength: 0.75,
+     reference: 'starry-night', reference_strength: 0.6})},
+  {key: 'monet', name: 'Monet', set: lookSet(
+    {flow: 'waterlily', flow_strength: 0.7, palette: 'impressionist',
+     palette_strength: 0.7, reference: 'water-lilies', reference_strength: 0.55})},
+];
+
+// A SECOND ENGINE, and it is the cheapest part of this. The thumbnails could have been
+// interleaved onto the main worker, and every one of them would then sit in front of a
+// slider the visitor had just moved -- `render()` supersedes its own previous job by
+// bumping `token`, which is exactly the wrong behaviour for eight background jobs that
+// have to yield instead. A second Worker of the same module costs one more copy of the
+// package and buys the whole scheduling problem: the strip cannot delay a render, and a
+// render cannot lose a thumbnail.
+const thumbWorker = new Worker('./engine.worker.js', {type: 'module'});
+const thumbJobs = new Map();
+let thumbSeq = 0, looksOff = false;
+thumbWorker.addEventListener('message', e => {
+  const m = e.data;
+  const j = thumbJobs.get(m.id);
+  if(!j) return;
+  if(m.type === 'progress' || m.type === 'preview') return;   // nothing watches these
+  thumbJobs.delete(m.id);
+  if(m.type === 'error') j.reject(new Error(m.message)); else j.resolve(m);
+});
+// A strip that fails is a strip that does not appear. It must never reach #err: the
+// painting is unaffected, and an engine error printed under a working picture reads as the
+// picture being broken.
+thumbWorker.addEventListener('error', () => {
+  thumbJobs.forEach(j => j.reject(new Error('thumbnail engine unavailable')));
+  thumbJobs.clear();
+  looksOff = true;
+  $('#looks').hidden = true;
+});
+function thumbAsk(msg, transfer){
+  const id = ++thumbSeq;
+  return new Promise((resolve, reject) => {
+    thumbJobs.set(id, {resolve, reject});
+    thumbWorker.postMessage(Object.assign({id}, msg), transfer || []);
+  });
+}
+
+// The longest side a thumbnail is PAINTED at, before being drawn into a 118px box.
+//
+// It is not a thumbnail-sized number and it cannot be one. WORK_MIN_SIDE above explains
+// why a small canvas is not a small version of the same picture: the quadtree's leaf
+// ceiling is area/~95 (measured, and quoted there), so under ~475 kpx it falls below
+// target_n, tau collapses to the floor and every cell subdivides to min_cell -- a uniform
+// grid of identical strokes. A thumbnail painted that way would differ from the picture
+// the click produces in exactly the respect the strip exists to show, since `starry`
+// against `waterlily` IS ribbons against dabs. 880 on the long side is 517 kpx on a 3:2
+// frame, which clears the ceiling with the allocator still doing its job, and costs ~0.6 s
+// against ~0.8 s for the full 1000.
+const THUMB_SIDE = 880;
+// The picture stays first. Eight thumbnails is ~5 s of a second core, and starting that
+// while a visitor is still dragging would spend it repeatedly on looks nobody asked for --
+// so the queue waits for quiet after a finished render, and any new render resets it.
+const THUMB_IDLE_MS = 900;
+
+let thumbGen = 0, thumbSigNow = '', thumbTimer = null, thumbRunning = false;
+const thumbPix = new Map();          // look key -> the {pixels,w,h} last painted
+
+/** The parameters a look does NOT own, as a string. A look sets LOOK_FIELDS, so dragging
+ *  `palette_strength` must not throw eight paintings away; dragging `target_n` must,
+ *  because every one of them would come back different. The image and both masks are in
+ *  here for the same reason. */
+function thumbSig(){
+  const rest = {};
+  for(const k of Object.keys(params)) if(!LOOK_FIELDS.includes(k)) rest[k] = params[k];
+  return JSON.stringify([imgKey, rest, rgnWire(), vtxWire(), maskKey, regionKey]);
+}
+
+function looksBuild(){
+  const row = $('#lkRow');
+  if(!row) return;
+  row.innerHTML = '';
+  for(const lk of LOOKS){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'lk pend';
+    b.dataset.look = lk.key;
+    b.title = LOOK_FIELDS.filter(f => lk.set[f] !== LOOK_OFF[f])
+      .map(f => f + '=' + lk.set[f]).join('  ') || 'the photograph, ungraded';
+    const c = document.createElement('canvas');
+    c.width = 118; c.height = 78;
+    const nm = document.createElement('span');
+    nm.className = 'lknm';
+    nm.textContent = lk.name;
+    b.appendChild(c); b.appendChild(nm);
+    b.addEventListener('click', () => applyLook(lk));
+    row.appendChild(b);
+  }
+  looksMark();
+  redrawThumbs();
+}
+
+/** Which look the panel is currently showing, if any. A visitor who moves a slider off a
+ *  look is no longer on it, and the strip has to stop claiming they are. */
+function looksMark(){
+  const cur = LOOKS.find(lk => LOOK_FIELDS.every(f => {
+    const a = params[f], b = lk.set[f];
+    return typeof b === 'number' ? Math.abs((a || 0) - b) < 1e-9 : a === b;
+  }));
+  for(const el of document.querySelectorAll('.lk'))
+    el.classList.toggle('on', !!cur && el.dataset.look === cur.key);
+}
+
+/** Apply a look to the BASE, and point the panel at the base so that it says so.
+ *  A look is a whole-picture decision -- it answers "what kind of painting is this", which
+ *  a single passage cannot answer -- so it deliberately does not follow the layer
+ *  selection the way the Palette and Flow rows do. Selecting the base rather than quietly
+ *  writing past the selection is what keeps that visible: the rows the look just moved are
+ *  then the rows on screen. */
+function applyLook(lk){
+  if(rgnEditingLayers()) rgnSelect(0, false);
+  for(const f of LOOK_FIELDS){
+    if(!(f in DEFAULTS)) continue;         // an engine older than this list
+    params[f] = lk.set[f];
+    showControl(f, lk.set[f]);
+  }
+  publishSetup();
+  vtxStatus();
+  looksMark();
+  if($('#auto').checked) schedule(); else setStatus('look applied - press Render');
+}
+
+/** Draw whatever has already been painted. Called on a rebuild, because the strip is
+ *  cleared with innerHTML and its canvases go with it. */
+function redrawThumbs(){
+  for(const lk of LOOKS){
+    const px = thumbPix.get(lk.key);
+    if(px) paintThumb(lk.key, px);
+  }
+}
+
+function paintThumb(key, r){
+  const b = document.querySelector('.lk[data-look="' + key + '"]');
+  if(!b) return;
+  const c = b.querySelector('canvas');
+  const off = document.createElement('canvas');
+  off.width = r.w; off.height = r.h;
+  off.getContext('2d').putImageData(
+    new ImageData(new Uint8ClampedArray(r.pixels), r.w, r.h), 0, 0);
+  // `cover` computed here rather than left to object-fit: the canvas BITMAP is 118x78, and
+  // object-fit scales the ELEMENT, not what is drawn into it -- so the painting would be
+  // squashed to the box and every thumbnail would lie about the frame.
+  const s = Math.max(c.width / r.w, c.height / r.h);
+  const w = r.w * s, h = r.h * s;
+  const ctx = c.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.drawImage(off, (c.width - w) / 2, (c.height - h) / 2, w, h);
+  b.classList.remove('pend');
+}
+
+/** Called when a render finishes. Throws the strip away if anything a look does not own
+ *  has changed, then queues whatever is missing after a pause. */
+function thumbsMaybeStart(){
+  if(looksOff || !haveImage) return;
+  $('#looks').hidden = false;
+  const sig = thumbSig();
+  if(sig !== thumbSigNow){
+    thumbSigNow = sig;
+    thumbGen++;                                  // halts a queue already walking
+    thumbPix.clear();
+    for(const el of document.querySelectorAll('.lk')) el.classList.add('pend');
+  }
+  clearTimeout(thumbTimer);
+  thumbTimer = setTimeout(thumbRun, THUMB_IDLE_MS);
+}
+
+async function thumbRun(){
+  if(thumbRunning || looksOff || !haveImage) return;
+  const mine = thumbGen;
+  thumbRunning = true;
+  try{
+    for(const lk of LOOKS){
+      if(mine !== thumbGen) return;              // superseded; the new generation requeues
+      if(thumbPix.get(lk.key)) continue;
+      const width = Math.round(aspect >= 1 ? THUMB_SIDE : THUMB_SIDE * aspect);
+      const px = sourcePixels(width);
+      const msg = {type: 'render', rgba: px.data.buffer, w: px.width, h: px.height,
+                   params: Object.assign({}, params, lk.set),
+                   // ONE KEY FOR ALL EIGHT, which is worth 2.8x and is not a shortcut.
+                   // Every slot inside the cache carries its own key (pipeline.js `memo`):
+                   // `graded` is keyed on the grade parameters, so a look cannot be served
+                   // another look's ground -- while `detail` is keyed on the metric and
+                   // `canvas` on the block size and colour space, and neither of those
+                   // varies across a strip painted from one photograph. Keying per look
+                   // instead would recompute the base layer eight times, which pipeline.js
+                   // calls "the single most expensive step". Measured over these eight at
+                   // 880px: 2390 ms a cache per look, 862 ms shared. It is also why
+                   // MAX_CACHES=2 is not a problem here -- the strip only ever wants one.
+                   imgKey: 'lk' + imgKey};
+      const move = [px.data.buffer];
+      { const vw = vtxWire(); if(vw) msg.vortices = vw; }
+      const mb = maskBytes(px.width, px.height);
+      if(mb){ msg.mask = mb.buffer; msg.maskKey = 'lk' + maskKey; move.push(mb.buffer); }
+      const rb = regionBytes(px.width, px.height);
+      if(rb){
+        msg.regionLabels = rb.buffer; msg.regionKey = 'lk' + regionKey;
+        msg.regionOverrides = rgnWire(); move.push(rb.buffer);
+      }
+      const j = await thumbAsk(msg, move);
+      if(mine !== thumbGen || j.type === 'cancelled') return;
+      thumbPix.set(lk.key, {pixels: j.pixels, w: j.w, h: j.h});
+      paintThumb(lk.key, thumbPix.get(lk.key));
+    }
+  }catch(e){
+    // Deliberately silent, for the reason the worker's own error handler is: the painting
+    // is fine, and a red line under it would say otherwise.
+  }finally{
+    thumbRunning = false;
+  }
 }
 
 // ---- the sample the page opens with ---------------------------------------------------

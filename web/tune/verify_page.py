@@ -264,7 +264,11 @@ def page_runtime(node):
                                    "reference": "great-wave",
                                    "reference_strength": 0.8},
                         "vortices": [[0.5, 0.3], [0.2, 0.7]]})
-    warm = dict(base, localStorage={"oilpaint.setup": setup},
+    # `wide` puts the HOT run in the app shell and leaves the cold one stacked, so both
+    # layouts are driven by the two processes that already run. The shell is where the new
+    # arithmetic lives -- the picture sized from the stage's own box rather than from 62vh
+    # of the viewport -- and it would otherwise never execute here at all.
+    warm = dict(base, wide=True, localStorage={"oilpaint.setup": setup},
                 indexedDB={"image": {"dataUrl": "data:image/png;base64,AAAA",
                                      "name": "sunset.jpg"}})
 
@@ -463,6 +467,136 @@ def page_runtime(node):
     check("1" not in (hot["rgnAfterDelete"] or []) and "0" in (hot["rgnAfterDelete"] or []),
           "and deleting a layer removes it from the list, leaving the Base",
           str(hot["rgnAfterDelete"]))
+    # THE LOOKS STRIP. Eight paintings of the visitor's own photograph, one per named look,
+    # in place of three dropdowns of words. Two failures are possible here and neither is
+    # visible from outside the wire.
+    # Three, not eight: a thumbnail is an honest ~0.6 s painting, so the strip is the one
+    # feature whose price is linear in its length. `photo` is the off switch rather than a
+    # look -- without it, leaving a look means setting three rows to `none` by hand.
+    check(hot.get("looksBuilt") == ["photo", "vangogh", "monet"],
+          "the looks strip offers every look, in order", str(hot.get("looksBuilt")))
+    check(hot.get("looksHidden") is False,
+          "and it is on screen once there is an image to paint",
+          str(hot.get("looksHidden")))
+    check("flow=starry" in (hot.get("lookVanGogh") or ""),
+          "a look reaches the engine as a whole bundle, flow included",
+          str(hot.get("lookVanGogh")))
+    # THE ONE LOOK_OFF EXISTS FOR. `zorn` names a palette and nothing else, so a look that
+    # set only its own fields would leave van Gogh's `starry` combing the paint underneath
+    # it -- a Zorn palette in swirls, and neither look what it claimed. Every look sets
+    # every field, and this is the check that says so rather than the comment.
+    check("flow=none" in (hot.get("lookZorn") or ""),
+          "and switching looks clears the one before it rather than layering on it",
+          str(hot.get("lookZorn")))
+    if hot.get("lookSelBefore") is not None:
+        check(hot.get("lookSelBefore") is True and hot.get("lookSelAfter") is True,
+              "a look applied over a selected layer moves the selection to the base",
+              f"layer selected {hot.get('lookSelBefore')} -> base selected "
+              f"{hot.get('lookSelAfter')}")
+        # ...and it landed on the BASE, not on the layer it was clicked over. `base ...` is
+        # the wire line the harness writes from `msg.params`, so Monet's own flow appearing
+        # there is the proof: a look that had followed the selection would have put it in
+        # `regionOverrides` and left the base saying whatever it said before.
+        check("flow=waterlily" in (hot.get("lookBaseWire") or ""),
+              "and its values go to the base, which is where the panel now points",
+              str(hot.get("lookBaseWire")))
+
+    # UNDO. Every mark-making tool wrote into a canvas whose only way back was `Clear`, so
+    # the price of a misjudged stroke was the whole map and the price of a misjudged
+    # `Delete all` was every layer. What is checked here is the half that can fail quietly:
+    # a mask restored WITHOUT its layer list is a picture full of passages no panel row can
+    # reach, and from outside that looks exactly like an undo that worked.
+    check(hot.get("undoIdle") is True,
+          "undo is dimmed until there is something to undo", str(hot.get("undoIdle")))
+    check(hot.get("undoArmed") is True,
+          "and arms itself the moment an edit is made", str(hot.get("undoArmed")))
+    check(hot.get("undoLayersWiped") == ["0"]
+          and hot.get("undoLayersBack") == hot.get("undoLayersBefore")
+          and len(hot.get("undoLayersBefore") or []) > 1,
+          "Delete all can be taken back, layer list included",
+          f"{hot.get('undoLayersBefore')} -> {hot.get('undoLayersWiped')} "
+          f"-> {hot.get('undoLayersBack')}")
+    # A shared history can restore something made with a tool that is no longer open, so an
+    # undo that said nothing would look broken exactly when it is most needed.
+    check("undo" in (hot.get("undoStatus") or "").lower(),
+          "and it says what came back rather than leaving it to be spotted",
+          str(hot.get("undoStatus")))
+    # The swirl centres are a LIST, not a canvas, and take the other arm of undoSnap
+    # entirely -- so a snapshot that only ever copied pixels would pass everything above.
+    back = hot.get("undoVtxBack") or ["", ""]
+    check(hot.get("undoVtxPlaced") != back[0] and back[0] == back[1],
+          "a placed swirl centre can be taken back too",
+          f"{back[0]} -> {hot.get('undoVtxPlaced')} -> {back[1]}")
+
+    # THE APP SHELL. On a PC the stacked layout wasted the screen three ways -- a 62vh cap
+    # deciding the WIDTH of a landscape frame (measured: 420px of empty stage, 37% of it),
+    # a 1180px shell cap, and the cards a page below the picture. The rail fixes all three
+    # by giving the panel its own scroll context, which is the only thing the `.cards`
+    # comment's objection ever depended on.
+    check(cold.get("shellStamped") is False and hot.get("shellStamped") is True,
+          "the shell is stamped from the threshold, and only above it",
+          f"stacked {cold.get('shellStamped')} / wide {hot.get('shellStamped')}")
+    # The grip writes `--rail`, and it is a custom property rather than an inline width
+    # precisely so sizeWipe can read back what the layout was given.
+    check(hot.get("railWider") == "440px",
+          "dragging the grip toward the picture widens the rail", str(hot.get("railWider")))
+    check(hot.get("railClamped") == "260px",
+          "and the rail is clamped, so a drag can never leave the canvas no width",
+          str(hot.get("railClamped")))
+    check(hot.get("railReleased") is False,
+          "letting go ends the drag", str(hot.get("railReleased")))
+    # THE SIZING ITSELF, which is the point of the whole change: stacked, the picture is
+    # bounded by 62% of the VIEWPORT (the cap that was deciding a landscape frame's width
+    # from its height); in the shell it is bounded by the STAGE's own box, so it fills what
+    # the rail and the strips left. Both are computed from the same shimmed 700x394 stage in
+    # a 1440x900 window, so a shell that had quietly kept the viewport rule would report the
+    # identical width -- and this is the check that would notice.
+    check(cold.get("wipeWidth") and hot.get("wipeWidth")
+          and cold.get("wipeWidth") != hot.get("wipeWidth"),
+          "the shell sizes the picture from its pane, not from the viewport",
+          f"stacked {cold.get('wipeWidth')} / shell {hot.get('wipeWidth')}")
+
+    # THE DOCKED LAYERS PANEL. Arming Layers used to spend ~170px of canvas on a list, a
+    # readout and three lines of prose -- so the tool that needs the picture most was the
+    # one that shrank it most. The rail already scrolls, so the same list now costs the
+    # canvas nothing; this is Photoshop's own split, tool OPTIONS beside the canvas and the
+    # layer LIST in a docked panel.
+    check(hot.get("lyrIdle") is False,
+          "the layers panel stays away until there is a reason for it",
+          str(hot.get("lyrIdle")))
+    check(hot.get("lyrArmed") == [True, ""],
+          "arming the tool brings it, empty", str(hot.get("lyrArmed")))
+    check(hot.get("lyrWithLayer") == [True, "1"],
+          "and it counts the layers, which the Base is not one of",
+          str(hot.get("lyrWithLayer")))
+    # THE CLAIM WORTH CHECKING. The selection re-points the Palette and Flow rows, and those
+    # rows are live with no paint tool open -- so a panel that vanished with the tool would
+    # take away the only control over where they write, and hide the readout that answers
+    # "where is this slider going" exactly while it is still true.
+    check(hot.get("lyrOutlivesTool") == [True, "1"],
+          "and putting the tool away does not take the layers with it",
+          str(hot.get("lyrOutlivesTool")))
+
+    # THE THREE-COLUMN LAYOUT. `Allocation` is the most structural card on the page -- how
+    # many strokes there are and where they go -- so on a wide enough window it is docked
+    # opposite the other rail. The claim that can break is not that it appears but that it
+    # MIGRATES: one node moved as the window crosses 1360, never copied (two control
+    # surfaces for the same six fields is what schema.py exists to prevent) and never
+    # rebuilt (which would detach every listener its rows carry).
+    check(hot.get("lrailWide") == [True, "leftRail"],
+          "a wide window docks Allocation on the far side of the picture",
+          str(hot.get("lrailWide")))
+    # The middle band: room for one rail and not for two. The shell must stay on and the
+    # card must go home ABOVE the others, which is where Allocation sits in FRONT_GROUPS.
+    # ".rail" and not "rail": the shim mints its stubs from the selector and only strips a
+    # leading "#", so a class-selected element keeps its dot as an id.
+    check(hot.get("lrailNarrow") == [False, True, ".rail"],
+          "and a window with room for one rail keeps the shell and gives the card back",
+          str(hot.get("lrailNarrow")))
+    check(hot.get("lrailBack") == [True, "leftRail"],
+          "...and it goes back out again, so the migration is not one-way",
+          str(hot.get("lrailBack")))
+
     # The harness itself must not fail in silence either: a throw in the drive above used to
     # end its process with exit 0, no output and no result file at all.
     check(not hot.get("driveFailed"), "nothing threw while the layers were driven",
@@ -476,8 +610,13 @@ def page_runtime(node):
     # appears exactly once, or the CLI has a knob the page silently does not.
     front = {c["name"]: c["rows"] for c in cold["frontCards"]}
     adv = [c["name"] for c in cold["advCards"]]
+    # `color_jitter` is PROMOTED here rather than demoted -- it is filed under Irregularity
+    # with five controls that vary a stroke's shape, and it is the one that varies its
+    # colour. It lands last because the group is not renamed to move it (see PROMOTE in the
+    # page): the card is a place to look, the group is what the thing is, and `--color-jitter`
+    # stays an irregularity flag everywhere outside this panel.
     check(front.get("Palette") == ["palette", "palette_strength", "broken_color",
-                                   "reference", "reference_strength"],
+                                   "reference", "reference_strength", "color_jitter"],
           "the front Palette card is the preset, its strength, broken colour and the "
           "reference", str(front.get("Palette")))
     check(front.get("Flow") == ["flow", "flow_strength"],
