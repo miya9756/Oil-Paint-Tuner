@@ -711,8 +711,13 @@ This is a **Windows 11** workstation, and several inherited assumptions do not h
   this repo passes `encoding="utf-8"` explicitly for that reason — `JSON.stringify` does not
   escape non-ASCII, and cp1252 turns a `·` in a card name into two characters and a check
   that fails for a reason unrelated to the page. Pin it on any new bridge.
-- Git remote: none configured yet. Default branch **`main`** (`.gitlab-ci.yml` keys on
-  `$CI_DEFAULT_BRANCH`, so it does not care).
+- Git remote: **`origin` is `git@github.com:miya9756/Oil-Paint-Tuner.git`**, so
+  `.github/workflows/ci.yml` is the config that actually runs; `.gitlab-ci.yml` is still
+  carried for the other remote and neither is a stale copy of the other. Default branch
+  **`main`** (both configs key on the repository's own default rather than the literal name,
+  so renaming it does not silently stop deploys). **GitHub Pages must be enabled with
+  Source = "GitHub Actions"** or the deploy job 404s at `create deployment` with every test
+  green -- see the header of `ci.yml`.
 - Git LFS: [`.gitattributes`](.gitattributes) is broad by default — re-scope it once the
   data layout settles. `build_static.py` fails the build if an unsmudged pointer stub ever
   reaches the deploy tree.

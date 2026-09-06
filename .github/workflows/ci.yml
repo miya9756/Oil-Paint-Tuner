@@ -6,9 +6,14 @@
 # commit tests and deploys correctly on either. What they share is the ARGUMENT -- the node
 # assertion, the pinned numpy, the LFS premise -- and each states it where it applies.
 #
-# One-time repo setting this depends on: Settings -> Pages -> Source must be
-# "GitHub Actions". Without it the deploy job fails with a permissions error rather than
-# publishing to a branch nobody watches.
+# ONE-TIME REPO SETTING THIS DEPENDS ON, and the failure it produces is not self-evident:
+#   Settings -> Pages -> Source must be "GitHub Actions".
+# Without it every step here passes, the artifact uploads, and `deploy-pages` then fails
+# with
+#     Error: HttpError: Not Found ... Failed to create deployment (status: 404)
+# A 404 reads like a missing artifact or a bad token, and is neither: the deployment
+# endpoint does not exist until Pages is enabled on the repository. Nothing in this file
+# can enable it -- it is a repository setting, not a workflow permission.
 name: test and deploy
 
 on:
@@ -49,7 +54,13 @@ jobs:
       # from silently skipping the checks it exists to run.
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 24, not 20: GitHub began deprecating Node 20 on its runners in September 2025,
+          # and a pin to it is a warning today and a broken job later. Safe to move because
+          # what the parity suites ask of node is IEEE-754 double arithmetic and numpy's
+          # PCG64 reproduced bit for bit -- neither is version-sensitive, and the whole
+          # suite is green on 24 locally. (The `punycode` deprecation notice in the deploy
+          # job's log comes from inside actions/deploy-pages itself and is not ours to fix.)
+          node-version: "24"
 
       - name: install
         # numpy is PINNED BELOW 2.0, and this is load-bearing rather than caution:
