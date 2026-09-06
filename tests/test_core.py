@@ -5,6 +5,7 @@ go in CI. Same shape as 4d-relight's parity suites (see the python-js-parity ski
 node-driven parity test itself arrives with the WebGL port.
 """
 
+import json
 import os
 import sys
 
@@ -1630,6 +1631,52 @@ def test_project_round_trips():
             check(False, f"refused: {why}")
         except proj.ProjectError:
             check(True, f"refused: {why}")
+
+    # A BUNDLE IS THE SAME PROJECT WITH ITS MASKS AS FILES. Embedded base64 makes one
+    # self-contained document, which is what an example committed to a repository has to
+    # be; it is also the one form an image editor cannot open, so a mask still being
+    # worked on wants the other. Both load through `load`, which is what makes the choice
+    # about how you want to WORK rather than a fork in the format.
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        path = os.path.join(td, "valley.oilpaint.json")
+        wrote = proj.save_bundle(path, doc)
+        names = [os.path.basename(w) for w in wrote]
+        check(names == ["valley.oilpaint.json", "valley.regions.png", "valley.foveal.png"],
+              f"save_bundle writes the recipe and one file per mask ({names})")
+        with open(path, encoding="utf-8") as fh:
+            on_disk = json.load(fh)
+        check(on_disk["masks"] == {"regions": "valley.regions.png",
+                                   "foveal": "valley.foveal.png"},
+              f"and the document points at them by name ({on_disk['masks']})")
+        # The caller's document is NOT mutated: exporting a project must not quietly turn
+        # the copy in memory into one whose masks live in a directory it never chose.
+        check(str(doc["masks"]["regions"]).startswith("data:"),
+              "without rewriting the document it was handed")
+
+        back = proj.load(path)
+        check(back.region_mask is not None and back.foveal is not None,
+              "a bundle loads its masks from beside the file")
+        # THE SAME PIXELS, not merely two images that opened. A bundle that silently
+        # re-encoded a label mask would invent passages along every boundary.
+        a = np.asarray(got.region_mask, dtype="uint8")
+        b = np.asarray(back.region_mask, dtype="uint8")
+        check(a.shape == b.shape and bool((a == b).all()),
+              "and they are the same pixels the embedded form carried")
+        # Idempotent: a bundle re-exported stays a bundle, and the masks are not rewritten.
+        again = proj.save_bundle(path, on_disk)
+        check(len(again) == 1,
+              f"re-exporting a bundle rewrites only the document ({len(again)} file)")
+
+        # A REFERENCE NOTHING SATISFIES IS AN ERROR WITH THE NAME IN IT, not a project that
+        # loads with no passages -- which is what an empty mask also looks like.
+        os.remove(os.path.join(td, "valley.regions.png"))
+        try:
+            proj.load(path)
+            check(False, "refused: a bundle whose mask file is missing")
+        except proj.ProjectError as e:
+            check("valley.regions.png" in str(e),
+                  "refused: a bundle whose mask file is missing, and it names the file")
 
 
 def test_project_paints_what_it_describes():

@@ -713,7 +713,11 @@ body.shell .grip:hover,body.shell .grip.on{
          message, and it is not a file. -->
     <button id="projSave" title="Save everything &mdash; settings, layers, swirl centres and both masks &mdash; as one .oilpaint.json file. The photograph is not included: a project is a recipe, and it records only the picture's name.">Save project</button>
     <button id="projOpen" title="Open an .oilpaint.json project. You can also just drop one on the page. Anything the file does not mention is left as it is.">Open project</button>
-    <input type="file" id="projFile" accept=".json,application/json" hidden>
+    <!-- MULTIPLE, and images too: a bundle is the .json plus the mask PNGs it names, and a
+         browser has no folder to resolve a relative name against -- it gets the files it is
+         handed. Selecting all three (or dropping them together) is what makes the reference
+         form openable here at all. -->
+    <input type="file" id="projFile" accept=".json,application/json,image/*" multiple hidden>
     <button id="clearTop" disabled title="Forget the picture and start from an empty page.">Clear</button>
     <span class="spacer"></span>
     <span id="status">Waiting for an image.</span>
@@ -759,6 +763,15 @@ body.shell .grip:hover,body.shell .grip.on{
     <span class="fovnum" id="fovStrengthV">0.00</span>
     <span class="tsep"></span>
     <label class="tog"><input type="checkbox" id="fovShow" checked><span>show</span></label>
+    <!-- THE SAME PAIR THE LAYERS STRIP HAS, missing here for no reason anybody chose. The
+         focus map could be written inside a project but never as a file, so a map painted
+         over the photograph in an image editor had no way in and one painted here had no
+         way out -- while the region mask beside it had both. The three strips share one
+         grammar, and this was the hole in it. Grey PNG, BLACK MEANS SPEND THE STROKES
+         HERE: `--foveal`'s convention, which is the one the project format follows. -->
+    <button id="fovSave" title="Write the focus map as a grey PNG. Black means spend the strokes there &mdash; the file scripts/paint.py --foveal reads.">Save map</button>
+    <button id="fovLoad" title="Load a focus map PNG painted somewhere else. Black means spend the strokes there &mdash; the same file Save map writes and scripts/paint.py --foveal reads.">Load map</button>
+    <input type="file" id="fovFile" accept="image/*" hidden>
     <button id="fovUndo" disabled>Undo</button>
     <button id="fovClear">Clear</button>
     <span class="fovhint" id="fovHint">Paint where the eye should go &mdash; darker means more
@@ -2437,10 +2450,24 @@ function vtxMode(on){
 function publishSetup(){ saveSetup({params, vortices, regions: regionLayers}); }
 
 $('#setupBtn').addEventListener('click', async () => {
-  const text = JSON.stringify({params, vortices, regions: rgnWire()}, null, 1);
+  // A VALID PROJECT DOCUMENT, not a look-alike of one. This wrote `{params, vortices,
+  // regions}` with no `format` and no `version` -- the same three keys a project has, at
+  // the same indent, and refused by both readers with "not an oilpaint-project file". So a
+  // setup pasted into a message could not be opened by the person it was pasted to, and
+  // the failure named a format rather than the button that produced it.
+  //
+  // It also dropped both masks in silence, which is the worse half: the layers come back
+  // with no pixels, the painting has no passages, and nothing says a file is missing. The
+  // clipboard cannot carry a PNG, so what it can do is SAY SO -- and name the button that
+  // does carry one.
+  const doc = projectDoc(false);
+  const left = maskNamesPresent();
+  const text = JSON.stringify(doc, null, 1);
   try{
     await navigator.clipboard.writeText(text);
-    setStatus('setup copied');
+    setStatus('setup copied' + (left.length
+      ? ` — without the ${left.join(' or ')}; use Save project to keep ${left.length > 1 ? 'those' : 'that'}`
+      : ''));
   }catch(e){
     // Clipboard access is refused in plenty of ordinary situations (no user gesture chain,
     // an insecure origin, a permissions policy). Failing silently would look like a dead
@@ -2493,6 +2520,13 @@ $('#vtxArm').addEventListener('click', () => {
 // once per render, in maskBytes().
 const MASK_SIDE = 512;
 let maskCanvas = null, maskCtx = null, maskKey = 0, maskInk = false, brushing = false;
+/* A mask LOADED from a file is kept as the bytes that arrived and handed back unchanged on
+ * export, until something is painted over it. Without this, loading a map you drew at the
+ * photograph's own 2040px and saving the project again would quietly rewrite it from this
+ * page's 512px canvas: the detail destroyed by an export you asked for, silently, and only
+ * visible later at full res. Dropped the moment a dab lands, because from then on the
+ * canvas IS the mask and the file beside it is stale. */
+let fovPristine = null;
 
 function maskInit(){
   const img = $('#src');
@@ -2506,6 +2540,7 @@ function maskInit(){
   maskCtx = c.getContext('2d', {willReadFrequently: true});
   maskCtx.clearRect(0, 0, c.width, c.height);
   maskInk = false;
+  fovPristine = null;
   maskKey++;
 }
 
@@ -2513,6 +2548,7 @@ function maskClear(){
   if(!maskCtx) return;
   maskCtx.clearRect(0, 0, maskCanvas.width, maskCanvas.height);
   maskInk = false;
+  fovPristine = null;
   maskKey++;
 }
 
@@ -2522,6 +2558,8 @@ function maskClear(){
 // parity suite reproduces on purpose (test_pipeline_parity, "a new map through a warm
 // cache is not served the old one").
 function maskTouched(){
+  // The canvas is now the map, so a file it may have come from is stale. See fovPristine.
+  fovPristine = null;
   maskKey++;
   maskInk = maskHasInk();
   // A map nobody has told the allocator to read is a map that does nothing, and "I painted
@@ -2820,6 +2858,7 @@ $('#fovWeight').addEventListener('input', e => {
 // `scripts/paint.py --regions` reads. Layer 0 is transparent rather than black, because it
 // is the absence of a layer rather than a layer -- painting with the Base selected erases.
 const RGN_SIDE = 512;
+let rgnPristine = null;             // the loaded bytes, until a fill or a dab lands. See fovPristine.
 const MIXED = Symbol('mixed');            // several selected layers, several values
 let REGION_LEGEND = [], MAX_REGIONS = 0, REGION_FIELDS = [];
 // id -> {overrides: {field: value}, visible: bool}. Ids 1..MAX_REGIONS-1; 0 is the Base and
@@ -2865,6 +2904,7 @@ function rgnInit(){
   regionKey++;
   regionCounts = null;
   regionPresent = new Set();
+  rgnPristine = null;
 }
 
 /** Draw a stored mask back onto the canvas. `createElement('img')`, not `new Image()`, so
@@ -3182,10 +3222,17 @@ function rgnGuide(){
     return 'Press <b>+ New layer</b>, then ' + (brush ? 'drag on the picture to paint it.'
       : 'click a passage of the picture to fill it.')
       + ' With the base selected, a mark <b>wipes</b> back to it.';
-  return t === 0
-    ? `${verb} to <b>wipe back to the base</b>.`
-    : `${verb} to ${brush ? 'paint' : 'fill'} <b>Layer ${t}</b> \u2014 the Palette and Flow `
-      + 'rows below then write to that layer.';
+  // The erase wording names WHOSE pixels go. An erase aimed at a layer leaves every other
+  // layer alone, and a strip that still said "wipe back to the base" would be describing
+  // the behaviour this replaced -- the one that ate the layer underneath.
+  if(t === 0){
+    const owned = regionSel.filter(id => id !== 0);
+    return owned.length
+      ? `${verb} to <b>wipe Layer ${owned.join(', ')}</b> \u2014 other layers are left alone.`
+      : `${verb} to <b>wipe back to the base</b>.`;
+  }
+  return `${verb} to ${brush ? 'paint' : 'fill'} <b>Layer ${t}</b> \u2014 the Palette and Flow `
+    + 'rows below then write to that layer.';
 }
 
 /** The source at the mask's own grid. Drawn rather than taken from `sourcePixels`, whose
@@ -3254,8 +3301,9 @@ function rgnFill(fx, fy){
     }
   }
   regionCtx.putImageData(img, 0, 0);
-  rgnCommit(st.live, n ? rgnCount(n, target, 'filled')
-              : 'nothing filled \u2014 raise the fill spread, or turn off "one patch only"');
+  rgnCommit(st.live, st.wrote ? rgnCount(st.wrote, target, 'filled')
+              : (n ? 'nothing wiped — none of those pixels are in the selected layer'
+                   : 'nothing filled — raise the fill spread, or turn off "one patch only"'));
 }
 
 /**
@@ -3265,9 +3313,21 @@ function rgnFill(fx, fy){
  */
 const rgnTargetNow = () => $('#rgnErase').checked ? 0 : rgnTarget();
 
-/** "filled 900 px into layer 2" / "wiped 900 px back to the base". */
-const rgnCount = (n, target, verb) => target === 0
-  ? `wiped ${n} px back to the base` : `${verb} ${n} px into layer ${target}`;
+/** Is this an erase aimed at particular layers, as against the Base's wipe-everything?
+ *  Asked by the writer (which pixels it may touch) and by the status line (what to say
+ *  when it touched none), so it is one function rather than the same test written twice. */
+const rgnEraseMine = () => $('#rgnErase').checked && regionSel.some(id => id !== 0);
+
+/** "filled 900 px into layer 2" / "wiped 900 px out of layer 2" / "...back to the base".
+ *  The erase wording names the layer it took FROM, because that is now the thing that
+ *  varies: an erase with a layer selected leaves every other layer alone. */
+const rgnCount = (n, target, verb) => {
+  if(target !== 0) return `${verb} ${n} px into layer ${target}`;
+  const owned = regionSel.filter(id => id !== 0);
+  return owned.length ? `wiped ${n} px out of layer${owned.length > 1 ? 's' : ''} `
+                        + owned.join(', ')
+                      : `wiped ${n} px back to the base`;
+};
 
 /**
  * The writer that puts one pixel into a region, and the flag that says whether doing so can
@@ -3284,19 +3344,41 @@ function rgnPutter(d, target){
   const cr = Math.round(col[0] * 255), cg = Math.round(col[1] * 255),
         cb = Math.round(col[2] * 255);
   const ca = target === 0 ? 0 : 255;
-  const st = {live: !rgnInert(target)};
+  // `wrote` is the count the status line has to use. Both callers count the pixels they
+  // VISITED -- the flood area, the disc of a dab -- and with the erase filter below those
+  // are no longer the same number: erasing over another layer's territory visits thousands
+  // of pixels and writes none. Reporting the visits would claim "wiped 4,000 px" of a mask
+  // that did not change.
+  const st = {live: !rgnInert(target), wrote: 0};
+  // ERASE TAKES BACK ONLY WHAT THE SELECTION OWNS.
+  //
+  // It used to write the base over every pixel under the brush, whatever layer that pixel
+  // belonged to -- so erasing a stray edge of the sky with the sky selected also ate the
+  // water underneath it, and the only way to notice was to look at a layer you were not
+  // working on. The mask is ONE image with a label per pixel, which is what made that easy
+  // to write and wrong to use: "erase" on a selected layer has to mean what it means in
+  // every editor, which is erase MINE.
+  //
+  // The Base is the exception, and it is the reason this is a filter rather than a change
+  // of target: with the Base selected the chip arms itself and goes read-only, because
+  // wiping is then the only thing a click can do -- so an empty selection keeps the old
+  // whole-mask behaviour instead of quietly doing nothing.
+  const only = (target === 0 && rgnEraseMine())
+    ? new Set(regionSel.filter(id => id !== 0)) : null;
   return [q => {
-    if(!st.live && d[q + 3] >= 128){
-      const was = rgnNearest(d[q], d[q + 1], d[q + 2]);
-      if(was !== target && !rgnInert(was)) st.live = true;
-    }
+    const painted = d[q + 3] >= 128;
+    const was = painted ? rgnNearest(d[q], d[q + 1], d[q + 2]) : 0;
+    if(only && !(painted && only.has(was))) return;
+    if(!st.live && painted && was !== target && !rgnInert(was)) st.live = true;
     d[q] = cr; d[q + 1] = cg; d[q + 2] = cb; d[q + 3] = ca;
+    st.wrote++;
   }, st];
 }
 
 /** Everything an edit to the mask owes once it is FINISHED -- once per fill, and once per
  *  brush STROKE rather than once per dab: a dab is microseconds and a render is a second. */
 function rgnCommit(touchedLive, msg){
+  rgnPristine = null;               // painted on: the canvas is the mask now. See rgnPristine.
   regionKey++;
   regionCounts = null;
   rgnScan();
@@ -3402,8 +3484,9 @@ function rgnBrushUp(){
   rgnStrokeState = null;
   // One commit per STROKE, not per dab -- a dab is a few hundred microseconds and a render
   // is a second, so committing inside the drag would make the brush unusable.
-  rgnCommit(S.st.live, S.n ? rgnCount(S.n, S.target, 'painted')
-                           : 'nothing painted \u2014 the brush fell outside the picture');
+  rgnCommit(S.st.live, S.st.wrote ? rgnCount(S.st.wrote, S.target, 'painted')
+                           : (S.n ? 'nothing wiped — none of those pixels are in the selected layer'
+                                : 'nothing painted — the brush fell outside the picture'));
 }
 
 /** Wand or brush. One source of truth, read off the button, because the guidance strip, the
@@ -3563,16 +3646,43 @@ $('#rgnClear').addEventListener('click', () => {
   if(regionCtx) regionCtx.clearRect(0, 0, regionCanvas.width, regionCanvas.height);
   regionLayers = {}; regionSel = [0]; regionKey++; regionCounts = null;
   regionPresent = new Set();
+  rgnPristine = null;
   saveRegionMask(null);
   rgnLayersBuild(); rgnSyncRows();
   publishSetup(); schedule();
 });
+// THE FOCUS MAP'S OWN DOOR, both ways. The region mask has had `Save mask` / `Load mask`
+// since layers existed; this map could only travel inside a project, so a focus map painted
+// over the photograph in an image editor -- which is a far better tool for "follow this
+// figure" than a round brush -- had no way in. Grey PNG, BLACK = spend the strokes here.
+$('#fovSave').addEventListener('click', () => {
+  const png = fovealPng();
+  if(!png){ setStatus('nothing painted on the focus map yet'); return; }
+  download(maskNames(projectBase()).foveal, png);
+});
+$('#fovLoad').addEventListener('click', () => $('#fovFile').click());
+$('#fovFile').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  e.target.value = '';
+  if(!f) return;
+  undoSnap('fov');
+  let url;
+  try{ url = await readAs(f, 'readAsDataURL'); }
+  catch(err){ setStatus('that focus map would not read'); return; }
+  // `importFoveal` ends in maskTouched(), which drops fovPristine -- so the bytes are
+  // claimed AFTER it, not before, or the export would silently fall back to the canvas.
+  if(!await importFoveal(url)){ setStatus('that focus map would not decode'); return; }
+  fovPristine = url;
+  setStatus('focus map loaded');
+  if(params.foveal_strength > 0) schedule();
+  else setStatus('focus map loaded — raise "follow it" above 0 for it to count');
+});
 $('#rgnSave').addEventListener('click', () => {
-  if(!regionCanvas) return;
-  const a = document.createElement('a');
-  a.href = regionCanvas.toDataURL('image/png');
-  a.download = 'regions.png';
-  a.click();
+  const png = rgnPng();
+  if(!png){ setStatus('no layers to save yet'); return; }
+  // The same file `Save project` writes beside the .json, named the same way, so a mask
+  // saved on its own drops straight into a bundle.
+  download(maskNames(projectBase()).regions, png);
 });
 
 // ---- upload ------------------------------------------------------------------------
@@ -3585,12 +3695,12 @@ drop.addEventListener('drop', e => {
   // A .json dropped here is a PROJECT and not a photograph. Tested before `upload` rather
   // than inside it, because `upload` is also the restore path and a stored session must
   // never be re-read as a project.
-  const f = e.dataTransfer.files[0];
-  if(f && !maybeProjectFile(f)) upload(f);
+  const fs = e.dataTransfer.files;
+  if(!maybeProjectFile(fs) && fs[0]) upload(fs[0]);
 });
 file.addEventListener('change', e => {
-  const f = e.target.files[0];
-  if(f && !maybeProjectFile(f)) upload(f);
+  const fs = e.target.files;
+  if(!maybeProjectFile(fs) && fs[0]) upload(fs[0]);
 });
 window.addEventListener('paste', e => {
   const it = [...(e.clipboardData?.items || [])].find(i => i.type.startsWith('image/'));
@@ -4069,7 +4179,7 @@ const PROJECT_VERSION = 1;
  *  image is how a map gets applied backwards by whichever side was written second, so the
  *  format has one and the page converts at its edge rather than asking the CLI to.
  */
-function fovealPng(){
+function fovealGrey(){
   if(!maskCanvas || !maskInk) return null;
   const w = maskCanvas.width, h = maskCanvas.height;
   const src = maskCtx.getImageData(0, 0, w, h).data;
@@ -4084,11 +4194,63 @@ function fovealPng(){
     im.data[4 * i + 3] = 255;
   }
   ctx.putImageData(im, 0, 0);
-  return out.toDataURL('image/png');
+  return out;
 }
 
-/** Everything on screen, as the document project.py reads. */
-function projectDoc(){
+/* ---- masks as FILES ---------------------------------------------------------------
+ * A mask leaves this page at the PHOTOGRAPH's own pixel size, not at the 512 the page
+ * paints it at, because the thing you do with an exported mask is open it in an image
+ * editor on top of the photograph -- and a map that does not line up with the picture is
+ * not worth opening. Two consequences, and they pull opposite ways:
+ *
+ *  - the REGION mask must scale with smoothing OFF. It is a label field, and an
+ *    interpolated pixel between region 2 and region 4 is region 3 -- a passage that
+ *    exists nowhere in the picture, invented along every boundary in it. `drawInto`
+ *    documents the same trap on the way in; this is the export half, and here a 2D
+ *    context CAN do nearest, so it does.
+ *  - the FOVEAL map must scale WITH smoothing. It is a weight field; blocky is simply
+ *    a worse version of the same map.
+ */
+function maskAtSourceSize(src, smooth){
+  const img = $('#src');
+  const w = img.naturalWidth || src.width, h = img.naturalHeight || src.height;
+  const out = document.createElement('canvas');
+  out.width = w; out.height = h;
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = !!smooth;
+  ctx.drawImage(src, 0, 0, w, h);
+  return out;
+}
+
+function rgnPng(){
+  if(rgnPristine) return rgnPristine;
+  if(!regionCanvas || !regionPresent || !regionPresent.size) return null;
+  return maskAtSourceSize(regionCanvas, false).toDataURL('image/png');
+}
+
+function fovealPng(){
+  if(fovPristine) return fovPristine;
+  const g = fovealGrey();
+  return g ? maskAtSourceSize(g, true).toDataURL('image/png') : null;
+}
+
+/** `sky.oilpaint.json` -> `sky.regions.png` / `sky.foveal.png`. The mirror of
+ *  `project.mask_names`, which a browser cannot import -- so `verify_page.py` reads the
+ *  names this produces and compares them against the Python, rather than against a string
+ *  it also had to type. */
+function maskNames(base){
+  const stem = String(base || 'painting').replace(/\.oilpaint\.json$/i, '')
+                                         .replace(/\.json$/i, '') || 'painting';
+  return {regions: stem + '.regions.png', foveal: stem + '.foveal.png'};
+}
+
+/** Everything on screen, as the document project.py reads.
+ *
+ *  `withMasks` is false for the clipboard, which carries text and cannot carry a file.
+ *  It is a parameter rather than a `delete` at the call site because building the masks
+ *  means `toDataURL` on a full-resolution canvas twice, and that is real work to throw
+ *  away. */
+function projectDoc(withMasks = true){
   const doc = {format: PROJECT_FORMAT, version: PROJECT_VERSION,
                params: Object.assign({}, params)};
   const name = $('#src').dataset.name;
@@ -4103,26 +4265,108 @@ function projectDoc(){
   // set stays what it already was, something only the CLI can name.
   const vw = vtxWire();
   if(vw) doc.vortices = vw;
-  const masks = {};
-  if(regionCanvas && regionPresent && regionPresent.size)
-    masks.regions = regionCanvas.toDataURL('image/png');
-  const fov = fovealPng();
-  if(fov) masks.foveal = fov;
-  if(Object.keys(masks).length) doc.masks = masks;
+  if(withMasks){
+    const masks = {};
+    const rgn = rgnPng();
+    if(rgn) masks.regions = rgn;
+    const fov = fovealPng();
+    if(fov) masks.foveal = fov;
+    if(Object.keys(masks).length) doc.masks = masks;
+  }
   return doc;
 }
 
+/** Which masks a save would carry, without building either of them. Named the way the
+ *  status line says them. */
+function maskNamesPresent(){
+  const out = [];
+  if(rgnPristine || (regionCanvas && regionPresent && regionPresent.size)) out.push('mask');
+  if(fovPristine || maskInk) out.push('focus map');
+  return out;
+}
+
+/** Hand one file to the browser.
+ *
+ *  THROUGH A BLOB, not the `data:` URL itself. A mask now leaves this page at the
+ *  PHOTOGRAPH's own size, so its PNG is hundreds of kilobytes of base64 -- and an
+ *  `<a download>` pointed at a data: URL that big is silently dropped by Chrome. No error,
+ *  no console line, nothing in the downloads list: which is exactly how `Save project`
+ *  came to write the .json and neither of the two files it names. The .json is small, so it
+ *  always arrived, and the failure looked like the masks never having been written at all.
+ *  A `blob:` URL has no such limit.
+ *
+ *  The fallback is not decoration: `URL.createObjectURL` does not exist under node, and
+ *  index_node.mjs reads back what was written by looking at the anchor's href. Keeping the
+ *  data URL there means the harness still sees the bytes, and a browser too old for object
+ *  URLs still gets the old behaviour rather than no behaviour.
+ *
+ *  Revoked on a timer, never immediately: the click starts the download asynchronously and
+ *  revoking out from under it cancels the file. */
+function download(name, href){
+  let url = href, made = false;
+  const m = /^data:([^;,]*?)(;base64)?,/.exec(href || '');
+  if(m && typeof URL !== 'undefined' && URL.createObjectURL){
+    try{
+      const body = href.slice(m[0].length);
+      const bytes = m[2] ? Uint8Array.from(atob(body), c => c.charCodeAt(0))
+                         : new TextEncoder().encode(decodeURIComponent(body));
+      url = URL.createObjectURL(new Blob([bytes],
+              {type: m[1] || 'application/octet-stream'}));
+      made = true;
+    }catch(e){ url = href; }        // a mask that will not re-encode still downloads
+  }
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  // What the file was made OF, kept beside what the browser downloads it through. A blob:
+  // URL is opaque, and index_node.mjs has to read the bytes back to check them -- node has
+  // `URL.createObjectURL` too, so a harness-only branch would be a second code path and the
+  // wrong thing to test. Browsers ignore an unknown property on an anchor.
+  a._data = href;
+  a.click();
+  if(made) setTimeout(() => URL.revokeObjectURL(url), 30000);
+}
+
+function projectBase(){
+  return (($('#src').dataset.name || 'painting').replace(/\.[^.]*$/, '')) || 'painting';
+}
+
+/** SAVE PROJECT WRITES A BUNDLE: the recipe, and each mask beside it as an ordinary PNG.
+ *
+ *  The masks used to be embedded as `data:` URLs, which makes one self-contained file --
+ *  right for an example committed to a repository, and wrong for a mask you are still
+ *  working on, because base64 inside JSON is not something an image editor can open. A
+ *  bundle keeps them editable: paint over `sky.regions.png` in anything that saves a PNG,
+ *  and the same project picks the change up.
+ *
+ *  This is `project.save_bundle` in the browser, and deliberately the same shape -- build
+ *  the embedded document, then move each `data:` URL out to a file beside it and leave a
+ *  relative name in its place. One writer, one exploder, on both sides. */
 function exportProject(){
   const doc = projectDoc();
-  const a = document.createElement('a');
-  a.href = 'data:application/json;charset=utf-8,'
-    + encodeURIComponent(JSON.stringify(doc, null, 1) + '\n');
-  const base = (($('#src').dataset.name || 'painting').replace(/\.[^.]*$/, ''))
-    || 'painting';
-  a.download = base + '.oilpaint.json';
-  a.click();
-  const n = doc.masks ? Object.keys(doc.masks).length : 0;
-  setStatus(`project saved${n ? ` — ${n} mask${n > 1 ? 's' : ''} embedded` : ''}`);
+  const base = projectBase(), names = maskNames(base);
+  const masks = Object.assign({}, doc.masks || {});
+  const files = [];
+  for(const key of ['regions', 'foveal']){
+    const v = masks[key];
+    if(typeof v === 'string' && v.startsWith('data:')){
+      files.push([names[key], v]);
+      masks[key] = names[key];      // a relative name: `load` resolves it beside the file
+    }
+  }
+  if(files.length) doc.masks = masks;
+  // The JSON FIRST, so that a browser which stops after one download has written the file
+  // the other two are named by, rather than two masks nothing points at.
+  download(base + '.oilpaint.json', 'data:application/json;charset=utf-8,'
+           + encodeURIComponent(JSON.stringify(doc, null, 1) + '\n'));
+  for(const [name, href] of files) download(name, href);
+  // NAMES THE FILES, because the thing that goes wrong here is one of them not arriving --
+  // a browser asks before writing several at once, and a refused or unnoticed prompt leaves
+  // the .json alone in the folder pointing at masks that were never saved. Saying which
+  // files to expect is what makes that visible without a trip to the developer console.
+  setStatus(files.length
+    ? `project saved — ${1 + files.length} files: ${[base + '.oilpaint.json']
+        .concat(files.map(f => f[0])).join(', ')} — allow multiple downloads if asked`
+    : 'project saved — no masks written: nothing is painted on the layers or the focus map');
 }
 
 /** Draw a data URL onto a canvas, at that canvas's own size. Shared by both mask imports. */
@@ -4169,7 +4413,7 @@ async function importFoveal(url){
  *  carries only a palette is a legitimate thing to hand somebody, and the alternative --
  *  silently restoring defaults for the rest -- would make importing one destroy work the
  *  file said nothing about. */
-async function importProject(doc){
+async function importProject(doc, sidecars){
   if(!doc || doc.format !== PROJECT_FORMAT)
     throw new Error('not an ' + PROJECT_FORMAT + ' file');
   // The same ceiling project.py enforces, and for the same reason: painting something
@@ -4189,16 +4433,38 @@ async function importProject(doc){
   // which is the harder failure to diagnose and the more annoying one to recover from.
   // Found by the harness, which had no `createImageData` and so made the foveal step throw
   // -- the panel then kept a layer list the wire had already moved past.
-  if(doc.masks && doc.masks.regions && regionCtx){
+  // A MASK IS EITHER EMBEDDED OR A NAME BESIDE THE FILE, and the browser has no folder to
+  // go looking in -- it is handed files, never paths. So a bundle arrives as the .json and
+  // its PNGs selected or dropped together, and `sidecars` is what they were read into,
+  // keyed by lower-cased basename. A reference nothing satisfies is REPORTED rather than
+  // skipped: a project that loads with its layers and none of their pixels looks exactly
+  // like one whose mask was empty, and the difference is a file you forgot to drag.
+  const missing = [];
+  const resolve = (v) => {
+    if(typeof v !== 'string' || !v) return null;
+    if(v.startsWith('data:')) return v;
+    const hit = sidecars && sidecars.get(v.replace(/^.*[\\/]/, '').toLowerCase());
+    if(!hit) missing.push(v);
+    return hit || null;
+  };
+  const rgnUrl = resolve(doc.masks && doc.masks.regions);
+  const fovUrl = resolve(doc.masks && doc.masks.foveal);
+  if(rgnUrl && regionCtx){
     try{
-      await drawInto(doc.masks.regions, regionCanvas, regionCtx);
+      await drawInto(rgnUrl, regionCanvas, regionCtx);
       regionKey++;
       rgnScan();
+      // The bytes that ARRIVED, kept for export -- see rgnPristine. A mask painted at the
+      // photograph's own size must not be rewritten from this page's 512px canvas just
+      // because the project it came in was saved again.
+      rgnPristine = rgnUrl;
       saveRegionMask(regionCanvas.toDataURL('image/png'));
     }catch(e){ /* the layers stay; they simply have no pixels yet */ }
   }
-  if(doc.masks && doc.masks.foveal){
-    try{ await importFoveal(doc.masks.foveal); }catch(e){ /* the map stays unpainted */ }
+  if(fovUrl){
+    try{
+      if(await importFoveal(fovUrl)) fovPristine = fovUrl;
+    }catch(e){ /* the map stays unpainted */ }
   }
   // The panel is REBUILT rather than poked row by row: a project can move any of forty
   // fields plus every layer, and `boot(false)` is already the one path that puts a whole
@@ -4210,35 +4476,58 @@ async function importProject(doc){
   const bits = [Object.keys(doc.params || {}).length + ' settings'];
   const nl = Object.keys(doc.regions || {}).length;
   if(nl) bits.push(nl + ' layer' + (nl > 1 ? 's' : ''));
-  if(doc.masks && doc.masks.regions) bits.push('a mask');
-  if(doc.masks && doc.masks.foveal) bits.push('a focus map');
-  setStatus('project loaded — ' + bits.join(', '));
+  if(rgnUrl) bits.push('a mask');
+  if(fovUrl) bits.push('a focus map');
+  setStatus('project loaded — ' + bits.join(', ')
+            + (missing.length ? ` — MISSING ${missing.join(', ')}, `
+                                + 'open the project and its .png files together' : ''));
   schedule();
 }
 
 /** A dropped or chosen file that is not an image. Returns true if it was handled, so the
  *  upload path can keep treating everything else as a photograph. */
-function maybeProjectFile(f){
-  if(!f || !/\.json$/i.test(f.name || '')) return false;
-  const fr = new FileReader();
-  fr.onload = async () => {
+function readAs(f, how){
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(fr.result);
+    fr.onerror = () => rej(new Error('could not read ' + (f && f.name || 'that file')));
+    fr[how](f);
+  });
+}
+
+/** Takes the WHOLE selection, not one file, because a project may be a bundle: the .json
+ *  and the mask PNGs it names, dropped or selected together. Anything alongside the
+ *  project is a candidate sidecar -- requiring a particular order, or a particular count,
+ *  would be a rule with nothing to gain by it. */
+function maybeProjectFile(files){
+  const list = [...(files || [])].filter(Boolean);
+  const doc = list.find(f => /\.json$/i.test(f.name || ''));
+  if(!doc) return false;
+  (async () => {
     try{
-      await importProject(JSON.parse(fr.result));
+      const sidecars = new Map();
+      for(const f of list){
+        if(f === doc) continue;
+        // One unreadable sibling must not take the project down with it: the masks are
+        // best-effort in `importProject` for the same reason.
+        try{ sidecars.set(String(f.name || '').toLowerCase(),
+                          await readAs(f, 'readAsDataURL')); }catch(e){}
+      }
+      await importProject(JSON.parse(await readAs(doc, 'readAsText')), sidecars);
     }catch(e){
       // To the status line and #err, never silently: a project that will not open looks
       // exactly like a page that ignored the drop.
       $('#err').textContent = 'That project would not open: ' + (e.message || e);
       setStatus('project not loaded');
     }
-  };
-  fr.readAsText(f);
+  })();
   return true;
 }
 
 $('#projSave').addEventListener('click', exportProject);
 $('#projOpen').addEventListener('click', () => $('#projFile').click());
 $('#projFile').addEventListener('change', e => {
-  if(e.target.files[0]) maybeProjectFile(e.target.files[0]);
+  if(e.target.files && e.target.files.length) maybeProjectFile(e.target.files);
   e.target.value = '';           // so the same file can be opened twice running
 });
 // A MASK MADE SOMEWHERE ELSE. The region mask is an ordinary RGB PNG read through the
@@ -4256,6 +4545,9 @@ $('#rgnFile').addEventListener('change', async e => {
     await drawInto(fr.result, regionCanvas, regionCtx);
     regionKey++;
     rgnScan();
+    // Kept EXACTLY as it arrived, so saving the project writes back the mask you painted
+    // rather than this page's 512px resample of it. See rgnPristine.
+    rgnPristine = fr.result;
     // The layers the mask turned out to contain, seeded inert so importing one never
     // changes the picture on its own -- the same rule `+ New layer` follows.
     for(const id of regionPresent) rgnEnsure(id);
@@ -4281,7 +4573,7 @@ $('#rgnFile').addEventListener('change', async e => {
 // deployed page under 900 KB while leaving "full res" somewhere to go. Re-encode from
 // assets/0201.png if a different trade is wanted.
 //
-// `sample-project.json` is examples/mountain-valley.oilpaint.json, copied into the deploy
+// `sample-project.json` is examples/<project.DEFAULT_PROJECT>, copied into the deploy
 // tree by build_static.py and synthesised by serve_tune.py, so both front doors open on the
 // same picture. It matters that it is the SAME FILE rather than a second copy: what a
 // visitor meets on the deployed page is then something they can reproduce exactly with

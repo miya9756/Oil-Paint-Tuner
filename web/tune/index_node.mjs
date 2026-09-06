@@ -838,10 +838,38 @@ release();
 out.brushStatus = $('#status').textContent;
 await settle(900);
 out.brushRendered = renders().length > beforeBrush;
-// The same brush with the erase chip on goes to the base, exactly as the fill does.
+// The same brush with the erase chip on wipes, exactly as the fill does -- and wipes only
+// what the SELECTION owns. Erasing used to write the base over every pixel under the brush
+// whatever layer it belonged to, so tidying one layer's edge silently ate the layer
+// underneath, and the only way to find out was to go and look at a layer you were not
+// working on. Both halves are driven: the selected layer's pixels go...
 $('#rgnErase').checked = true; $('#rgnErase').fire('change', {});
 stroke(4, [[150, 90], [170, 110]])();
 out.brushEraseStatus = $('#status').textContent;      // synchronous, as above
+await settle(400);
+
+// ...and the same place, erased with a DIFFERENT layer selected, gives nothing up. Paint
+// into layer 1 somewhere fresh, add a second layer, select it, and wipe over layer 1's
+// pixels: the status has to say nothing was taken rather than report the pixels the brush
+// walked over -- the disc of a dab is what the caller counts, and it is no longer what an
+// erase writes.
+$('#rgnErase').checked = false; $('#rgnErase').fire('change', {});
+lyrRow(1).fire('click', {});
+stroke(5, [[152, 92], [168, 108]])();
+await settle(400);
+out.eraseSetup = $('#status').textContent;
+$('#rgnAdd').fire('click', {});
+await settle(140);
+const other = ($('#rgnLayers')._kids || []).map(r => Number(r.dataset.id))
+                                           .filter(id => id && id !== 1)[0];
+out.eraseOtherLayerId = other ?? null;
+if(other){
+  lyrRow(other).fire('click', {});
+  $('#rgnErase').checked = true; $('#rgnErase').fire('change', {});
+  stroke(6, [[152, 92], [168, 108]])();
+  out.eraseOtherLayer = $('#status').textContent;
+  await settle(400);
+}
 await settle(400);
 $('#rgnModeFill').fire('click', {});
 out.brushOptsBack = { fill: $('#rgnFillOpts').hidden, brush: $('#rgnBrushOpts').hidden };
@@ -1044,13 +1072,37 @@ out.lrailBack = [[...globalThis.document.body.classList._s].includes('lrail'), h
 // own output is handed back to verify_page.py, which parses it with the REAL Python reader
 // -- a page that wrote a plausible-looking document Python refused would otherwise pass
 // every check either side could make on its own.
+// A MASK PAINTED SOMEWHERE ELSE, which is the workflow the bundle exists for: drawn in an
+// image editor at the photograph's own size, loaded here, and -- the part with a trap in it
+// -- handed BACK OUT unharmed. This page paints its masks at 512px, so re-exporting one
+// from the canvas would silently throw away everything finer than that. The shimmed
+// FileReader hands back `data:image/jpeg;base64,AAAA` while a canvas gives `data:,`, so the
+// two sources are told apart by their bytes rather than by trusting the flag.
+$('#rgnFile').fire('change', { target: { files: [new File([], 'hand.png',
+                                                          { type: 'image/png' })], value: '' } });
+await settle(160);
+out.rgnFileLoaded = $('#status').textContent;
+$('#fovFile').fire('change', { target: { files: [new File([], 'hand-focus.png',
+                                                          { type: 'image/png' })], value: '' } });
+await settle(160);
+out.fovFileLoaded = $('#status').textContent;
+
+// SAVE PROJECT WRITES A BUNDLE: the recipe, and each mask beside it as an ordinary PNG.
+// Snapshot `made` first -- it accumulates every element the run has ever created, so a
+// filter over the whole list would pick up anchors from earlier sections and could not tell
+// how many files THIS click wrote, which is the thing being checked.
+const beforeSave = made.length;
 $('#projSave').fire('click', {});
 await settle(200);
-const dl = made.filter(e => typeof e.download === 'string'
-                         && e.download.endsWith('.oilpaint.json')).pop();
+const wrote = made.slice(beforeSave).filter(e => typeof e.download === 'string' && e.download);
+out.bundleFiles = wrote.map(e => e.download);
+// The bytes each sidecar was written FROM: the loaded file, or this page's canvas.
+out.bundleFrom = wrote.filter(e => /\.png$/i.test(e.download))
+                      .map(e => [e.download, String(e._data).slice(0, 24)]);
+const dl = wrote.find(e => e.download.endsWith('.oilpaint.json'));
 out.projectSaved = !!dl;
 out.projectName = dl ? dl.download : '';
-out.projectJson = dl ? decodeURIComponent(String(dl.href).split(',').slice(1).join(',')) : '';
+out.projectJson = dl ? decodeURIComponent(String(dl._data).split(',').slice(1).join(',')) : '';
 
 // ...and back in. A project names some fields and leaves the rest alone, so the check is
 // that a named one MOVES and reaches the engine -- reading it off the wire, because a page
@@ -1064,7 +1116,23 @@ try{
 }catch(e){ out.errors.push('project reparse: ' + e.message); }
 if(imported){
   const pf = $('#projFile');
-  pf.fire('change', { target: { files: [new File([imported], 'x.oilpaint.json')], value: '' } });
+  const pngs = out.bundleFiles.filter(n => /\.png$/i.test(n));
+  out.bundleRefs = (() => { try{ return JSON.parse(out.projectJson).masks || null; }
+                            catch(e){ return null; } })();
+
+  // THE SIDECAR THAT DID NOT COME WITH IT, first. A bundle whose PNGs were left behind
+  // must SAY which file it wanted: the alternative is a project that loads its layers with
+  // no pixels, which on screen is indistinguishable from a mask that was empty. Driven
+  // before the good case so the run ends in the loaded state rather than this one.
+  pf.fire('change', { target: { files: [new File([imported], 'y.oilpaint.json')], value: '' } });
+  await settle(120);
+  out.bundleMissing = $('#status').textContent;
+
+  // ...and now the whole bundle, the .json and its masks selected together, which is the
+  // only way a browser can resolve a relative name: it is handed files, never a folder.
+  pf.fire('change', { target: { files: [new File([imported], 'x.oilpaint.json'),
+                                        ...pngs.map(n => new File([], n, { type: 'image/png' }))],
+                                value: '' } });
   // The status line first, and briefly: importing ends in `schedule()`, which puts a render
   // 160 ms behind it, and 'draft...' then owns the line. Same transient as every other edit
   // on this page -- see brushStatus.
@@ -1073,6 +1141,40 @@ if(imported){
   await settle(900);
   out.projectImported = renders().pop() || '';
 }
+
+// PAINT OVER IT and the loaded bytes must be let go: from the first dab the canvas is the
+// mask, and handing the old file back would export a picture the page is no longer showing.
+rgnCanvas.fire('pointerdown', { clientX: 260, clientY: 130 });
+await settle(160);
+const beforeRe = made.length;
+$('#projSave').fire('click', {});
+await settle(200);
+out.bundleAfterPaint = made.slice(beforeRe)
+                           .filter(e => typeof e.download === 'string'
+                                     && /\.png$/i.test(e.download))
+                           .map(e => [e.download, String(e._data).slice(0, 24)]);
+
+// 5h. COPY SETUP HAS TO WRITE SOMETHING THAT OPENS. It used to write {params, vortices,
+// regions} -- a project's three keys with no `format` and no `version`, refused by both
+// readers -- and to drop both masks without saying so. Both halves are checked: the text
+// is handed to the real Python reader by verify_page.py, and the status line has to name
+// what the clipboard could not carry.
+$('#setupBtn').fire('click', {});
+await settle(60);
+out.copySetup = lastCopy;
+out.copyStatus = $('#status').textContent;
+
+// 5i. THE FOCUS MAP'S OWN DOOR, both ways -- the pair the region mask has always had.
+const beforeFov = made.length;
+$('#fovSave').fire('click', {});
+await settle(60);
+out.fovSaved = made.slice(beforeFov)
+                   .filter(e => typeof e.download === 'string' && e.download)
+                   .map(e => e.download);
+$('#fovFile').fire('change', { target: { files: [new File([], 'hand-painted.png',
+                                                          { type: 'image/png' })], value: '' } });
+await settle(160);
+out.fovLoaded = $('#status').textContent;
 
 // 6. The page must have armed its own error reporting, whatever else happened.
 out.reportsErrors = (globalThis.window._h.error || []).length > 0

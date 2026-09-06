@@ -540,7 +540,11 @@ writing to the wrong place, and from outside that looks exactly like a row that 
 
 
 `oilpaint/project.py` is the answer to a question none of the above could answer on its
-own: **what is "this painting", as a thing you can send someone?** A finished setup here is
+own: (**`DEFAULT_PROJECT` in that module names the example the tuner opens on** -- one string
+read by `build_static.py`, `serve_tune.py` and `verify_page.py`, because three readers of one
+file is three chances for the deployed page to open on something no test looked at. The
+opening project's own settings are what a first visit renders, so a check that named a flow
+rather than reading it out of the example went red the first time the default moved.) **what is "this painting", as a thing you can send someone?** A finished setup here is
 five things -- the `PaintConfig` fields, the per-region overrides, the swirl centres, the
 region mask and the foveal map -- and they lived in five places, so reproducing somebody's
 result meant collecting all of them by hand. A project is one JSON document carrying all
@@ -557,8 +561,44 @@ the CLI, **Save project** / a dropped `.json` on the page. Four things worth kno
   setup out of LFS, since `.gitattributes` sends every `*.png` there and a `.json` stays
   diffable on GitHub. A relative path (`"regions": "sky-mask.png"`) makes the mask an
   ordinary PNG a person can paint in an image editor, which is a far better tool for a
-  complicated boundary than the page's flood fill. The page's **Load mask** button is the
-  same door.
+  complicated boundary than the page's flood fill.
+
+  **`Save project` writes the referenced form -- a BUNDLE** (`project.save_bundle`, and the
+  same shape inline in `exportProject`): build the embedded document, then move each `data:`
+  URL out to a file beside it and leave a relative name behind. Names come from the
+  project's own stem (`sky.oilpaint.json` -> `sky.regions.png`), so a folder holds several
+  projects without collision -- a rule that necessarily exists **twice**, since a browser
+  cannot import `project.py`, and is therefore pinned by `verify_page.py` against
+  `project.mask_names` rather than against a string the test also typed. `to_dict` still
+  writes the embedded form, which is what the committed example stays in.
+
+  **A download goes through a `Blob`, never the `data:` URL itself.** A mask now leaves the
+  page at the photograph's own size, so its PNG is hundreds of kilobytes of base64, and an
+  `<a download>` pointed at a data: URL that big is *silently dropped* by Chrome -- no error,
+  no console line, nothing in the downloads list. The `.json` is small and always arrived, so
+  the failure looked exactly like the masks never having been written at all. The anchor
+  keeps the original data URL on `_data`, because `index_node.mjs` reads the bytes back and
+  node has `URL.createObjectURL` too, so a harness-only branch would be testing a path the
+  browser never takes. The status line names the files it wrote, since the other half of this
+  failure is a browser's multi-download prompt going unanswered.
+
+  Two things the browser side forces. **A bundle is opened by handing over all the files at
+  once** -- the `.json` and its PNGs, selected or dropped together -- because a page is
+  given files, never a folder, and has nothing to resolve a relative name against; a
+  reference nothing satisfies is *named* in the status line, since a project that loads its
+  layers with no pixels looks exactly like one whose mask was empty. And **a mask loaded
+  from a file is exported as the bytes that arrived**, not re-encoded from the canvas
+  (`rgnPristine` / `fovPristine`, dropped on the first dab): the page paints masks at 512px,
+  so a mask drawn over the photograph at its own size would otherwise be silently
+  downsampled by an export the visitor asked for. Both masks now have the save/load pair;
+  the focus map had neither, so a map painted in an editor had no way in.
+
+- **`Copy setup` writes a real project document, and says what it could not carry.** It used
+  to write `{params, vortices, regions}` -- a project's three keys, at a project's indent,
+  with no `format` and no `version` -- so both readers refused it with *not an
+  oilpaint-project file*, and it dropped both masks in silence. That is the one failure that
+  looks like the tool losing work: the layers come back with no pixels and nothing says a
+  file is missing. It now emits `projectDoc(false)` and names the masks it left behind.
 - **one convention per mask, and it is the CLI's.** The region mask is RGB through
   `regions.LEGEND`; the foveal map is grey with BLACK MEANING SPEND STROKES HERE, exactly as
   `--foveal` has always read it -- even though the page holds that map the other way up

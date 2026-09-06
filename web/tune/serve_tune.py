@@ -39,6 +39,7 @@ sys.path.insert(0, _ROOT)
 
 from oilpaint.metrics import edge_alignment, psnr  # noqa: E402
 from oilpaint.pipeline import PaintConfig, paint  # noqa: E402
+from oilpaint.project import DEFAULT_PROJECT  # noqa: E402
 from oilpaint.schema import as_dict as schema_dict  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -158,8 +159,7 @@ class Handler(BaseHTTPRequestHandler):
         # editing the example is visible on a refresh.
         if path == "/sample-project.json":
             try:
-                with open(os.path.join(_ROOT, "examples",
-                                       "mountain-valley.oilpaint.json"),
+                with open(os.path.join(_ROOT, "examples", DEFAULT_PROJECT),
                           encoding="utf-8") as fh:
                     return self._send(200, json.load(fh))
             except OSError:

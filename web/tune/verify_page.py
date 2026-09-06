@@ -85,6 +85,19 @@ def check(ok, label, detail=""):
         FAILS.append(label)
 
 
+
+def _png(path, colour=(255, 0, 0)):
+    """A one-pixel PNG at `path`. Enough to prove a reference RESOLVES.
+
+    The bundle check is about a relative name being found beside the project file, not
+    about what is in it -- the shimmed canvas has no pixels to write anyway. A real image
+    rather than a stub file so that `project.load`, which actually decodes both masks,
+    exercises the same path a hand-painted mask takes.
+    """
+    from PIL import Image
+    Image.new("RGB", (1, 1), colour).save(path)
+
+
 def main():
     src = open(PAGE).read()
     css_raw = re.search(r"<style>(.*?)</style>", src, re.S).group(1)
@@ -273,7 +286,8 @@ def page_runtime(node):
     # here for the same reason build_static.py copies it rather than keeping a second copy:
     # a check written against a private fixture would pass while the shipped file rotted.
     try:
-        with open(os.path.join(ROOT, "examples", "mountain-valley.oilpaint.json"),
+        from oilpaint.project import DEFAULT_PROJECT  # noqa: E402
+        with open(os.path.join(ROOT, "examples", DEFAULT_PROJECT),
                   encoding="utf-8") as fh:
             base["sampleProject"] = json.load(fh)
     except OSError:
@@ -319,8 +333,15 @@ def page_runtime(node):
           str(hot["renders"][:2]))
     check(cold["restoredImage"] is True and "sample" in (cold["sourceTag"] or ""),
           "while a fresh visit opens on the shipped sample", repr(cold["sourceTag"]))
-    check(any("flow=none" in e for e in cold["renders"]),
-          "rendered at engine defaults", str(cold["renders"][:1]))
+    # A FRESH VISIT RENDERS THE OPENING PROJECT, not the engine's defaults -- the page opens
+    # on a painting rather than on a photograph. The expected flow is READ OUT of the example
+    # instead of named here, because naming one pins whichever example happened to be the
+    # default the day this was written: it asserted `flow=none`, which was true of the old
+    # default's base and of nothing else, and went red the first time the default moved.
+    want_flow = ((base.get("sampleProject") or {}).get("params") or {}).get("flow", "none")
+    check(any(f"flow={want_flow}" in e for e in cold["renders"]),
+          "rendered from the opening project's own settings",
+          f"want flow={want_flow}, got {cold['renders'][:1]}")
 
     # THE REGION LAYERS, and this is the block that matters most on the page. A layer is
     # the only colour control here that is not generated from the schema, and the model --
@@ -614,11 +635,20 @@ def page_runtime(node):
     # Python refuses would pass every check either side could make by itself.
     check(hot.get("projectSaved") is True, "the page writes a project file",
           str(hot.get("projectName")))
+    # ON DISK, as a folder, because that is what the page now writes and because resolving
+    # a mask's relative name against the project's own directory IS the mechanism -- a
+    # `from_dict` with no base_dir could never exercise it.
+    from oilpaint import project as project_mod  # noqa: E402
     if hot.get("projectJson"):
-        from oilpaint import project as project_mod  # noqa: E402
         try:
             doc = json.loads(hot["projectJson"])
-            got = project_mod.from_dict(doc)
+            with tempfile.TemporaryDirectory() as td:
+                jp = os.path.join(td, hot.get("projectName") or "p.oilpaint.json")
+                with open(jp, "w", encoding="utf-8") as fh:
+                    json.dump(doc, fh)
+                for name in (hot.get("bundleFiles") or [])[1:]:
+                    _png(os.path.join(td, name))
+                got = project_mod.load(jp)
             check(True, "and the Python reader accepts it unchanged")
             # The five parts, each read back through Python rather than looked for in the
             # text: a key spelled the way the page happens to spell it would pass a string
@@ -628,16 +658,80 @@ def page_runtime(node):
             check(bool(got.overrides) and all(
                       isinstance(k, int) for k in got.overrides),
                   "its layers arrive keyed by region id", str(sorted(got.overrides)))
-            # The MASKS are not checked from this document, and the reason is the harness
-            # rather than the page: the DOM shim has no canvas, so `toDataURL` returns an
-            # empty URL and `rgnScan` finds no passages -- the page correctly writes no
-            # `masks` key for a mask that does not exist. Embedded masks are covered where
-            # they can be: `test_project_round_trips` in tests/test_core.py, and the
-            # committed example below, which carries two real ones.
+            check(got.region_mask is not None and got.foveal is not None,
+                  "and both masks resolve to images beside the file",
+                  f"{got.region_mask and got.region_mask.size}, "
+                  f"{got.foveal and got.foveal.size}")
             check(got.source == doc.get("source", {}).get("name"),
                   "and it records which photograph it was made for", str(got.source))
         except Exception as e:
             check(False, "and the Python reader accepts it unchanged", f"{type(e).__name__}: {e}")
+
+    # ---- SAVE PROJECT WRITES A BUNDLE ---------------------------------------------
+    # The recipe, and each mask beside it as an ordinary PNG. Embedded base64 makes one
+    # self-contained file, which is right for an example committed to a repository and
+    # wrong for a mask still being worked on -- an image editor cannot open a JSON string.
+    files = hot.get("bundleFiles") or []
+    stem = (hot.get("projectName") or "").replace(".oilpaint.json", "")
+    check(len(files) == 3, "Save project writes the recipe AND both masks", str(files))
+    # THE SIDECAR NAMES ARE PINNED ACROSS THE TWO LANGUAGES. The rule exists twice -- a
+    # browser cannot import project.py -- so it is compared against the Python function
+    # rather than against a string this file also had to type, which would only prove the
+    # test and the page agree with each other.
+    want = project_mod.mask_names(hot.get("projectName") or "")
+    check(set(files[1:]) == {want["regions"], want["foveal"]},
+          "and names them the way project.mask_names does", f"{sorted(files[1:])} vs {want}")
+    refs = hot.get("bundleRefs") or {}
+    check(refs and all(isinstance(v, str) and not v.startswith("data:")
+                       for v in refs.values()),
+          "the document REFERENCES its masks rather than embedding them", str(refs))
+    # A MASK PAINTED SOMEWHERE ELSE COMES BACK OUT UNHARMED. This page paints its masks at
+    # 512px; a mask drawn over the photograph at its own size carries more than that, and
+    # re-exporting it from the canvas would destroy the difference silently, in a file the
+    # visitor asked for. The bytes that arrived are handed back instead -- and DROPPED the
+    # moment a dab lands, because from then on the canvas is the mask.
+    frm = dict(hot.get("bundleFrom") or [])
+    check(frm and all(v.startswith("data:image/jpeg") for v in frm.values()),
+          "a loaded mask is exported as the bytes that arrived, not a 512px resample",
+          str(frm))
+    after = dict(hot.get("bundleAfterPaint") or [])
+    check(after.get(want["regions"], "") != frm.get(want["regions"]),
+          "...and painting on it releases those bytes, so the export follows the canvas",
+          f"{frm.get(want['regions'])} -> {after.get(want['regions'], '(not written)')}")
+
+    # A REFERENCE NOTHING SATISFIES IS REPORTED. A bundle whose PNGs were left behind loads
+    # its layers with no pixels, which on screen is exactly what an empty mask looks like --
+    # so the difference has to be said, and it has to name the file.
+    miss = hot.get("bundleMissing") or ""
+    check("MISSING" in miss and want["regions"] in miss,
+          "a bundle opened without its masks says which files it wanted", miss)
+    check("a mask" in (hot.get("projectStatus") or "")
+          and "a focus map" in (hot.get("projectStatus") or ""),
+          "...and opened WITH them, both arrive", str(hot.get("projectStatus")))
+
+    # ---- COPY SETUP WRITES SOMETHING THAT OPENS -----------------------------------
+    # It used to write {params, vortices, regions}: a project's three keys with no `format`
+    # and no `version`, which both readers refuse. So a setup pasted into a message could
+    # not be opened by the person it was pasted to, and the error named a format rather
+    # than the button. Parsed by the REAL reader here, for the same reason the file above is.
+    try:
+        project_mod.from_dict(json.loads(hot.get("copySetup") or "{}"))
+        check(True, "Copy setup writes a document the Python reader accepts")
+    except Exception as e:
+        check(False, "Copy setup writes a document the Python reader accepts",
+              f"{type(e).__name__}: {e}")
+    check("masks" not in json.loads(hot.get("copySetup") or "{}"),
+          "...without masks, because a clipboard carries text and a mask is a file")
+    check("without the" in (hot.get("copyStatus") or ""),
+          "...and says so, naming the button that does carry them",
+          str(hot.get("copyStatus")))
+
+    # ---- THE FOCUS MAP HAS THE PAIR THE REGION MASK ALWAYS HAD --------------------
+    check(hot.get("fovSaved") == [want["foveal"]],
+          "the focus map can be written as its own PNG", str(hot.get("fovSaved")))
+    check("focus map loaded" in (hot.get("fovFileLoaded") or ""),
+          "...and one painted elsewhere can be loaded back in",
+          str(hot.get("fovFileLoaded")))
     # THE PAGE OPENS ON A PAINTING. The deployed tuner ships the sample photograph AND the
     # project that turns it into three painted passages, so the first frame says what the
     # tool does rather than showing a photograph with nothing done to it. Read off the FIRST
@@ -671,11 +765,27 @@ def page_runtime(node):
         name = os.path.basename(ex)
         try:
             pr = project_mod.load(ex)
-            check(pr.region_mask is not None and pr.foveal is not None
-                  and bool(pr.overrides) and bool(pr.vortices) and bool(pr.params),
-                  f"{name} still carries all five parts",
-                  f"masks={pr.region_mask is not None},{pr.foveal is not None} "
-                  f"layers={sorted(pr.overrides)} swirls={sorted(pr.vortices)}")
+            with open(ex, encoding="utf-8") as fh:
+                raw = json.load(fh)
+            # EVERY PART THE FILE DECLARES HAS TO ARRIVE -- which is not the same as
+            # requiring all five of every example. A project with no focus map is a
+            # perfectly ordinary project (the deployed one has none), so demanding one
+            # would fail a file that is right; what must never pass is a file that names a
+            # mask which no longer decodes, because that example demonstrates nothing and
+            # is the file people copy.
+            declared = {"a region mask": ("masks" in raw and raw["masks"].get("regions"),
+                                          pr.region_mask is not None),
+                        "a focus map": ("masks" in raw and raw["masks"].get("foveal"),
+                                        pr.foveal is not None),
+                        "layers": (raw.get("regions"), bool(pr.overrides)),
+                        "swirl centres": (raw.get("vortices"), bool(pr.vortices)),
+                        "settings": (raw.get("params"), bool(pr.params))}
+            broken = sorted(k for k, (said, got) in declared.items() if said and not got)
+            carried = sorted(k for k, (said, got) in declared.items() if said and got)
+            check(not broken and bool(pr.params) and pr.region_mask is not None
+                  and bool(pr.overrides),
+                  f"{name} still carries what it declares",
+                  f"carries {carried}" + (f"; LOST {broken}" if broken else ""))
             # The mask has to still contain the passages the file grades, or the example
             # quietly demonstrates nothing: a layer with no pixels paints exactly like a
             # layer that was never there.
@@ -810,12 +920,16 @@ def page_runtime(node):
           str(cold["eraseOnBase"]))
     check(cold["eraseOnLayer"] == {"checked": False, "disabled": False},
           "and on a layer it is the visitor's to set", str(cold["eraseOnLayer"]))
+    # The erase half names the LAYER it will take from, not "the base": an erase aimed at a
+    # layer spares every other one, and the old wording described the behaviour this
+    # replaced -- the one that ate the layer underneath.
     check("fill <b>Layer" in (cold["fillGuide"] or "")
-          and "wipe back to the base" in (cold["eraseGuide"] or ""),
-          "the strip over the picture says which of the two a mark will do",
+          and "wipe Layer" in (cold["eraseGuide"] or "")
+          and "left alone" in (cold["eraseGuide"] or ""),
+          "the strip over the picture says which of the two a mark will do, and whose",
           repr(cold["fillGuide"]) + " / " + repr(cold["eraseGuide"]))
     check("wiped" in (cold["eraseStatus"] or ""),
-          "and a fill with it armed goes to the base whatever is selected",
+          "and a fill with it armed wipes rather than fills",
           repr(cold["eraseStatus"]))
 
     # THE FOCUS MAP'S STRENGTH, ON THE STRIP THAT PAINTS THE MAP. Two widgets, one number:
@@ -858,6 +972,16 @@ def page_runtime(node):
     # way in to the same promise, and a second way in is where a promise usually breaks.
     check(cold["brushInertNoRender"] is True,
           "a stroke into a layer that still agrees with the panel does not re-render")
+    # ERASE TAKES BACK ONLY WHAT THE SELECTION OWNS. It used to write the base over every
+    # pixel under the brush whatever layer it belonged to, so tidying the edge of one layer
+    # silently ate the one beside it -- a loss with nothing on screen to report it, findable
+    # only by going to look at a layer you were not working on. The two halves have to be
+    # driven together: wiping that works is half a check when the question is what it spares.
+    check(cold.get("eraseOtherLayerId"),
+          "there is a second layer to be spared", str(cold.get("eraseOtherLayerId")))
+    check("nothing wiped" in (cold.get("eraseOtherLayer") or ""),
+          "erasing over another layer's pixels with this one selected takes nothing",
+          repr(cold.get("eraseOtherLayer")))
     check("wiped" in (cold["brushEraseStatus"] or ""),
           "the brush honours the erase chip exactly as the fill does",
           repr(cold["brushEraseStatus"]))

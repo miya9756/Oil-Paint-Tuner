@@ -62,15 +62,15 @@ reference sets the mood, the palette sets the tubes.
 Seven groups of controls. The ones you will reach for most are on the front cards; the fine
 trims fold away under **Advanced** so the panel stays readable.
 
-| group | what it changes |
-| --- | --- |
-| **Allocation** | How many strokes, how big they can get, and where they go. This is the single biggest lever on how abstract the painting looks. |
-| **Palette** | The colour: which pigments, how far from the photograph, warmth, and the optional famous-painting reference. |
-| **Flow** | Which way the marks run. Leave it off and they follow the photograph's own structure; turn it on and they follow a field you choose — swirling, rippling, or hatched. |
-| **Geometry** | The shape of a stroke: how long and thin it gets, how far it may wander from where it was placed, and how strongly it commits to a direction. |
-| **Irregularity** | The hand. Size variation, wobble, colour drift, bristle streaks, tapered ends — the things that stop it looking machine-made. |
-| **Paint** | The underpainting, the edge hardness of a mark, and how thickly the paint covers. |
-| **Impasto** | Thickness and light. The paint is built as a real height field and then lit, so you can rake a light across the picture and watch the ridges catch it. |
+| group                  | what it changes                                                                                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Allocation**   | How many strokes, how big they can get, and where they go. This is the single biggest lever on how abstract the painting looks.                                        |
+| **Palette**      | The colour: which pigments, how far from the photograph, warmth, and the optional famous-painting reference.                                                           |
+| **Flow**         | Which way the marks run. Leave it off and they follow the photograph's own structure; turn it on and they follow a field you choose — swirling, rippling, or hatched. |
+| **Geometry**     | The shape of a stroke: how long and thin it gets, how far it may wander from where it was placed, and how strongly it commits to a direction.                          |
+| **Irregularity** | The hand. Size variation, wobble, colour drift, bristle streaks, tapered ends — the things that stop it looking machine-made.                                         |
+| **Paint**        | The underpainting, the edge hardness of a mark, and how thickly the paint covers.                                                                                      |
+| **Impasto**      | Thickness and light. The paint is built as a real height field and then lit, so you can rake a light across the picture and watch the ridges catch it.                 |
 
 Turn on the **help** toggle in the toolbar and every control explains itself in place.
 
@@ -92,9 +92,145 @@ the marked part goes finer.
 Van Gogh's sky over Monet's water, in one picture. Regions you do not paint keep whatever
 the base is set to.
 
+All three are ordinary PNGs both ways: **Save mask** / **Save map** write one out at your
+photograph's own size, **Load mask** / **Load map** take one back, and a mask you loaded is
+saved back unchanged until you paint on it. So the fiddly boundary can be done in a real
+image editor and the rest here.
+
 **Swirl centres** — when a swirling flow field is on, click to place the centres of the
 swirls by hand instead of taking the default arrangement. Positions are stored as fractions
 of the image, so they land in the same place whatever size you render at.
+
+## One picture, built up
+
+Here is what all of that does to a real photograph, one setting at a time. Every painting
+below is the one above it with **a single setting added** — same photograph, same stroke
+budget, same seed — so what you are looking at in each is what that one setting did, and
+nothing else.
+
+This is also the picture the tuner opens on, so you can start from the last step and work
+backwards. The photograph is the sample the page ships with: sky, bare limestone, and a
+foreground of sunlit bracken — three passages a painter would treat differently.
+
+![A photograph of a mountain valley: blue sky and cloud along the top, jagged limestone peaks across the middle, and a foreground of sunlit bracken running to the bottom of the frame](assets/readme-step-0-photo.jpg)
+
+### 1. The strokes
+
+Every artistic control off. Eleven thousand strokes are placed where the picture asks for
+them — coarse ones first across the plain sky, fine ones last along the ridges — each
+turned to follow the form underneath it, over a blurred first pass so no gap shows through.
+The colour of every mark is taken straight from the photograph.
+
+This is the painter with nothing on top of it, and it is already not a filter: the plain sky
+gets the longest marks and the busy bracken the shortest, because that is where a painter
+would slow down.
+
+![The valley painted with visible brush strokes but the photograph's own colours: the bracken in ordinary greens, the rock in grey](assets/readme-step-1-strokes.jpg)
+
+### 2. A palette
+
+`--palette impressionist --palette-strength 0.7`
+
+The colour a painter would have *mixed*, rather than the one the camera recorded. Black
+leaves the picture — there is no black tube on this palette, and the darkest thing it can
+mix is ultramarine over alizarin — so the shadows in the rock go violet instead of grey.
+
+Worth noticing what did *not* happen. All 11,720 strokes are in exactly the same places, at
+the same angles and the same sizes as the step above. Only the pigment on them changed.
+
+![The same painting with an impressionist palette: the greens warmer, the rock shadows violet](assets/readme-step-2-palette.jpg)
+
+### 3. A famous painting's colours
+
+`--reference water-lilies --reference-strength 0.55`
+
+Instead of describing the colour you want, point at a picture that already has it. This
+moves the photograph's colour distribution onto Monet's — not an average tint, but the whole
+shape of it, so the darks go blue while the lights stay warm.
+
+It composes with the palette rather than replacing it: the reference decides the
+*statistics*, the palette decides which tubes a stroke may actually land on. And like the
+palette, it moves no stroke — the same 11,720 marks, still in the same places.
+
+![The same painting with Water Lilies' colours transferred onto it: the shadows cooled to blue-violet, the greens softened](assets/readme-step-3-reference.jpg)
+
+### 4. A flow field, over the whole picture
+
+`--flow waterlily --flow-strength 0.7`
+
+Now the marks stop following the photograph's own structure and follow a field you choose —
+here a horizontal weave of short dabs, Monet's water.
+
+Over the bracken it is exactly right. Over the sky it is merely *applied*, and the clouds go
+soft and directionless, because a field that acts on the whole picture acts on the parts that
+did not ask for one. That is what the next step is for.
+
+![The same painting with every stroke laid into a horizontal weave, the bracken lively but the clouds gone soft and directionless](assets/readme-step-4-flow.jpg)
+
+### 5. Layers: the same idea, aimed
+
+Hand it a mask and each passage is painted on its own terms. The sky gets a swirling field
+(`1:flow=starry`), the bracken a diagonal hatch (`2:flow=hatch`), and the limestone is in no
+layer at all, so it keeps the weave the base is set to.
+
+![Two panels: on the left the layer mask laid over the photograph, the sky tinted red and the bracken green with the rock left untinted; on the right the mask PNG itself, flat red, green and black](assets/readme-step-masks.jpg)
+
+The mask is an ordinary PNG, read through a legend: black is the base, and each other colour
+is one layer. This one was painted by hand at the photograph's own 1400 × 1054, so it lines
+up pixel for pixel — you fill a layer by clicking on the page, or paint the PNG in any image
+editor and load it back. Nothing here detects a sky for you.
+
+The limestone is the thing to look at: every stroke outside a layer comes out untouched.
+That is an invariant the test suite checks exactly, not a happy accident of this picture.
+
+![The same painting with the clouds now curling, the bracken hatched on the diagonal, and the limestone still woven](assets/readme-step-5-layers.jpg)
+
+### 6. A palette and a reference per layer
+
+A layer carries colour as well as direction, so the sky can be painted out of a different box
+of tubes than the ground in front of it — and can borrow a different painting's colour.
+
+The sky goes to `palette=fauve` under *Starry Night*; the bracken to `palette=impressionist`
+under *The Great Wave*, its hue turned towards gold and its broken colour raised. The
+limestone is in neither layer, so it keeps *Water Lilies* from step 3. Three references, one
+picture.
+
+![The same painting with a deep night-blue sky and cream clouds, a pale gold foreground, and the blue-violet limestone unchanged between them](assets/readme-step-6-colour.jpg)
+
+### 7. Swirl centres, placed by hand
+
+A swirling field arranges its centres on a spiral unless you tell it otherwise. Three clicks
+in the sky and the clouds re-comb around the points you chose instead. Neighbouring swirls
+turn opposite ways, and the positions are stored as fractions of the image, so they land in
+the same place whatever size you finally render at.
+
+![The same painting with the sky's swirls rearranged around three chosen points, the clouds curling into distinct eddies across the top of the frame](assets/readme-step-7-swirls.jpg)
+
+### That last picture is the one the page opens on
+
+It is also a file you can send someone. The whole setup — every slider, both layers, the
+swirl centres and the mask — saves as a small folder, which is what the tuner's **Save
+project** button writes:
+
+```
+my-painting.oilpaint.json     the recipe
+my-painting.regions.png       the layer mask
+```
+
+The mask is an ordinary PNG on purpose, so you can open it in any image editor, paint it over
+the photograph and save it back — for a complicated boundary that is a far better tool than
+clicking to fill. Drop the whole set back on the page to carry on, or paint it from the
+command line:
+
+```bash
+python scripts/paint.py web/tune/sample.jpg painting.png \
+    --project examples/sample.oilpaint.json --max-side 1400
+```
+
+The photograph is deliberately not inside it — a project is the recipe, not the ingredients,
+so running it over a *different* photograph is a perfectly sensible thing to do. The masks
+can also be folded into the `.json` itself, which is what the shipped examples do so that
+each is one file; see [`examples/`](examples/) for both forms.
 
 ## Rendering at full size
 
@@ -136,6 +272,9 @@ python scripts/paint.py photo.jpg painting.png \
 
 The masks the page's tools produce work here too — `--foveal mask.png` and
 `--regions mask.png` — so you can aim a look on the page and then batch it over a folder.
+If you paint one by hand instead, black is the meaningful colour on both: on a foveal map it
+means *spend the strokes here*, and on a region mask it is the base that everything left
+unpainted falls back to.
 The page's **Copy setup** button puts the current settings on your clipboard.
 
 You can also measure a colour reference off a painting you have the rights to:
@@ -206,20 +345,31 @@ catches a broken edit to it. Run it after touching `web/tune/index.html`.
 
 ## Built on
 
-The technique is a descendant of a long line of work in non-photorealistic rendering. The
-citations are reproduced in [`oilpaint/__init__.py`](oilpaint/__init__.py), beside the code
-that implements each one.
+The technique is a descendant of a long line of work in non-photorealistic rendering. Four
+papers are load-bearing:
 
-| work | what this takes from it |
-| --- | --- |
-| Haeberli, *Paint By Numbers* (1990) | the founding idea: a painting as an ordered collection of strokes that sample the photograph |
-| Litwinowicz, *Processing Images and Video for an Impressionist Effect* (1997) | turning strokes to follow the form, and perturbing them so they read as handmade |
-| Hertzmann, *Painterly Rendering with Curved Brush Strokes of Multiple Sizes* (1998) | the closest ancestor: coarse strokes first, fine ones last, over an opaque first pass |
-| Hertzmann, *Fast Paint Texture* (2002) | thick paint as a height field, lit |
-| Hays & Essa, *Image and Video Based Painterly Animation* (2004) | smoothing the direction field instead of trusting it pixel by pixel |
-| Kang, Lee & Chui, *Coherent Line Drawing* (2007) | a stronger way of reading direction out of an image |
-| Samet, *The Quadtree and Related Hierarchical Data Structures* (1984) | the structure that decides where the strokes go |
-| Zhang et al., *GaussianImage* (2024) | the optimised counterpart — deliberately not followed, because a perfectly fitted result is a photograph again |
+- **Haeberli, P.** *Paint By Numbers: Abstract Image Representations.* ACM SIGGRAPH Computer
+  Graphics **24**(4), 1990, pp. 207–214. — the founding idea, a painting as an ordered
+  collection of strokes sampling the source.
+- **Litwinowicz, P.** *Processing Images and Video for an Impressionist Effect.* SIGGRAPH 97,
+  pp. 407–414. — strokes oriented along the isophotes, and randomly perturbed to keep the
+  hand in them.
+- **Hertzmann, A.** *Painterly Rendering with Curved Brush Strokes of Multiple Sizes.*
+  SIGGRAPH 98, pp. 453–460, and *Fast Paint Texture*, NPAR 2002. — the opaque coarse
+  underpainting, and the height field that makes a stroke edge a ridge.
+- **Samet, H.** *The Quadtree and Related Hierarchical Data Structures.* ACM Computing
+  Surveys **16**(2), 1984, pp. 187–260. — the subdivision and its variance criterion.
+
+Three more it draws on, and one it deliberately does not follow:
+
+| work                                                                  | what this takes from it                                                                                         |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Hays & Essa,*Image and Video Based Painterly Animation* (NPAR 2004) | smoothing the direction field instead of trusting it pixel by pixel                                             |
+| Kang, Lee & Chui,*Coherent Line Drawing* (NPAR 2007)                | a stronger way of reading direction out of an image                                                             |
+| Zhang et al.,*GaussianImage* (ECCV 2024)                            | the optimised counterpart — deliberately not followed, because a perfectly fitted result is a photograph again |
+
+Every citation is reproduced in full in [`oilpaint/__init__.py`](oilpaint/__init__.py),
+beside the code that implements it.
 
 ---
 

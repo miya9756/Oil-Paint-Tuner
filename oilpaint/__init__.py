@@ -21,6 +21,9 @@ References (verified against primary sources 2026-08-15)
               Sizes." SIGGRAPH 98, pp. 453-460.
               -- layers of decreasing stroke radius; strokes placed where the canvas
                  differs from the reference; the opaque coarse first pass.
+[Hertzmann02] A. Hertzmann. "Fast Paint Texture." NPAR 2002.
+              -- stroke texture as a height field, lit as relief: the impasto pass, and
+                 the ridge a stroke's own edge leaves in the paint.
 [HaysEssa04]  J. Hays and I. Essa. "Image and Video Based Painterly Animation."
               NPAR 2004, pp. 113-120.  -- smoothed orientation fields.
 [Kang07]      H. Kang, S. Lee, C. K. Chui. "Coherent Line Drawing." NPAR 2007,

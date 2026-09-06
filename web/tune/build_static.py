@@ -32,6 +32,7 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, ROOT)
 
 from oilpaint.pipeline import PaintConfig  # noqa: E402
+from oilpaint.project import DEFAULT_PROJECT  # noqa: E402
 from oilpaint.schema import as_dict  # noqa: E402
 
 # Page assets, copied verbatim. package.json is NOT here: it exists only so `node` treats
@@ -51,7 +52,7 @@ PACKAGE = "oilpaint"  # web/tune/oilpaint/*.js -- every .js in it ships
 # reproduce on the command line -- which is most of the point of having a project format at
 # all. Renamed on the way in: the page asks for a stable name, and WHICH example is the
 # opening one is a decision for this file rather than a string buried in the page.
-SAMPLE_PROJECT = os.path.join(ROOT, "examples", "mountain-valley.oilpaint.json")
+SAMPLE_PROJECT = os.path.join(ROOT, "examples", DEFAULT_PROJECT)
 SAMPLE_PROJECT_AS = "sample-project.json"
 
 

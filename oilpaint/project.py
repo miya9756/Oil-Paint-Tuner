@@ -22,6 +22,16 @@ can open in any editor, paint in, and save back -- which is the whole of "make a
 somewhere else and import it". `load` resolves a path against the project file's own
 directory, so a project and its masks move as a folder.
 
+`to_dict` writes the embedded form and `save_bundle` writes the referenced one, from the
+same document: three files that travel together, named after the project itself.
+
+    sky.oilpaint.json      the recipe
+    sky.regions.png        RGB through regions.LEGEND, black is the base
+    sky.foveal.png         grey, BLACK MEANS SPEND STROKES HERE
+
+Both forms load through the same `load`, and the tuner writes and reads both, so which one
+a setup is in is a choice about how you want to WORK on it rather than a fork in the format.
+
 ONE CONVENTION PER MASK, and it is the CLI's, not the browser's:
 
   * the REGION mask is an RGB PNG read through `regions.LEGEND` -- black is the base and
@@ -52,6 +62,12 @@ from .regions import MAX_REGIONS, REGION_PARAMS
 
 FORMAT = "oilpaint-project"
 VERSION = 1
+
+# The example the tuner OPENS ON, named once. It is copied into the deploy tree by
+# build_static.py, synthesised by serve_tune.py and handed to the harness by
+# verify_page.py -- three readers of one file, which is three chances for the deployed
+# page to open on something the tests never looked at.
+DEFAULT_PROJECT = "sample.oilpaint.json"
 
 # A field whose default is None is OPTIONAL and float when set -- `tau` is the only one,
 # and it means "search for it unless told". `type(None)` would make it unwritable, so this
@@ -301,3 +317,101 @@ def save(path, doc):
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(doc, fh, indent=1, sort_keys=False)
         fh.write("\n")
+
+
+# The sidecar names a BUNDLE uses, derived from the project's own base name so that one
+# folder can hold several projects without their masks colliding -- `sky.oilpaint.json`
+# takes `sky.regions.png`, not a `regions.png` the next project would overwrite.
+#
+# This rule exists TWICE, here and in the tuner (`maskNames` in index.html), because a
+# browser cannot import this module. That is the drift this repo spends its test budget on,
+# so `verify_page.py` reads the page's chosen names and compares them against this function
+# rather than against a string it also had to type.
+MASK_SUFFIX = {"regions": ".regions.png", "foveal": ".foveal.png"}
+
+
+def mask_names(project_path):
+    """`a/b/sky.oilpaint.json` -> `{"regions": "sky.regions.png", ...}`. Basenames only.
+
+    Basenames rather than paths because this is what goes INTO the document, and a
+    project's masks live beside it -- `load` resolves them against the project's own
+    directory, so a bundle stays a bundle when the folder is moved or renamed.
+    """
+    base = os.path.basename(project_path)
+    for ext in (".oilpaint.json", ".json"):
+        if base.lower().endswith(ext):
+            base = base[:-len(ext)]
+            break
+    base = base or "painting"
+    return {k: base + suffix for k, suffix in MASK_SUFFIX.items()}
+
+
+def embed_masks(doc, base_dir=""):
+    """The inverse of `save_bundle`: a document whose masks are files -> a self-contained one.
+
+    Needed because what a PAGE fetches has to be a single URL -- the tuner's opening project
+    is one request, with no folder to go looking in -- and because a mask committed beside
+    code is a mask in Git LFS, which `.gitattributes` sends every `*.png` to and which a CI
+    checkout does not smudge. A mask already embedded is left alone, so this is idempotent
+    and safe on a document of either form. The caller's document is not mutated.
+    """
+    doc = dict(doc)
+    masks = dict(doc.get("masks") or {})
+    for key in ("regions", "foveal"):
+        value = masks.get(key)
+        if not value or (isinstance(value, str) and value.startswith("data:")):
+            continue
+        path = value if os.path.isabs(value) else os.path.join(base_dir or "", value)
+        if not os.path.exists(path):
+            raise ProjectError(
+                f"masks.{key}: no such mask file {value!r} (looked in {base_dir!r})")
+        with open(path, "rb") as fh:
+            masks[key] = "data:image/png;base64," + base64.b64encode(fh.read()).decode()
+    if masks:
+        doc["masks"] = masks
+    return doc
+
+
+def save_bundle(path, doc):
+    """Write a project AND its masks as separate files. Returns the paths written.
+
+    THE POINT OF THE BUNDLE is that a mask stays an ordinary PNG you can open in an image
+    editor, paint on, and save back without going through the tool at all. An embedded
+    `data:` URL cannot do that: it is the right form for an example committed to a
+    repository, and the wrong one for a mask still being worked on.
+
+    Any mask already given as a path is left exactly as it is, so calling this on a bundle
+    is a no-op for the masks and rewrites only the document. Any mask given as a `data:`
+    URL is written out beside the project and the reference replaced -- which makes this
+    the way to EXPLODE an embedded project into an editable one:
+
+        doc = json.load(open("examples/mountain-valley.oilpaint.json"))
+        project.save_bundle("work/valley.oilpaint.json", doc)
+
+    The caller's document is not mutated; `load` reads what this writes.
+    """
+    doc = dict(doc)
+    masks = dict(doc.get("masks") or {})
+    names = mask_names(path)
+    where = os.path.dirname(os.path.abspath(path))
+    written = []
+    for key in ("regions", "foveal"):
+        value = masks.get(key)
+        if not value:
+            continue
+        if not (isinstance(value, str) and value.startswith("data:")):
+            continue                    # already a sidecar; leave the reference alone
+        _, _, b64 = value.partition(",")
+        try:
+            raw = base64.b64decode(b64, validate=True)
+        except Exception:
+            raise ProjectError(f"masks.{key}: the embedded image is not valid base64")
+        out = os.path.join(where, names[key])
+        with open(out, "wb") as fh:
+            fh.write(raw)
+        masks[key] = names[key]
+        written.append(out)
+    if masks:
+        doc["masks"] = masks
+    save(path, doc)
+    return [os.path.abspath(path)] + written
