@@ -1,13 +1,19 @@
 # CLAUDE.md
 
-Guidance for Claude Code / AI agents in this repo. **This file is a router, not a spec** —
-the repo is new and most of what is worth knowing is in the skills below or in the two
-sibling repos.
+Guidance for Claude Code / AI agents in this repo. It routes to the skills for the rules
+that govern a change, and carries the reasoning behind the parts of the pipeline where the
+code alone does not explain itself.
+
+**`README.md` is the public front page and is written for a visitor, not a maintainer** —
+it is deliberately free of pipeline vocabulary. Do not move engineering detail into it, and
+do not treat its plain-language descriptions as the specification; this file and the code
+are that.
 
 ## What this is (one line)
 
-An oil-paint project: **a Python prototype first, then a browser program** (WebGL / WASM).
-Direction beyond that is still open — do not assume a technique from this file.
+A finished tool: a still-image oil-paint renderer, in Python, ported file-for-file to
+JavaScript so the whole thing runs in a browser with no server behind it. The browser
+tuner is the product; the CLI and the Python package are the same painter without the page.
 
 ## Read these first
 

@@ -5,10 +5,10 @@ anisotropic Gaussian "brush stroke", and the strokes are composited coarse-to-fi
 opaque base layer. No optimization, no learned component: every stage is a direct
 computation from the source pixels.
 
-Spec and rationale: docs/spec-step1.md
+How it works, and what each stage is for: see README.md.
 
-References (verified against primary sources 2026-08-15; see docs/spec-step1.md §2)
----------------------------------------------------------------------------------
+References (verified against primary sources 2026-08-15)
+--------------------------------------------------------
 [Haeberli90]  P. Haeberli. "Paint By Numbers: Abstract Image Representations."
               ACM SIGGRAPH Computer Graphics 24(4), Aug 1990, pp. 207-214.
               -- strokes sampling colour/shape/size/orientation from a source image.

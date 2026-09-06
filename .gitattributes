@@ -65,6 +65,15 @@ yarn.lock      text eol=lf -diff linguist-generated
 web/tune/*.jpg  -filter -diff -merge -text
 web/tune/*.png  -filter -diff -merge -text
 
+# The README's illustrations, for the same reason one step removed: they are rendered by
+# whatever views this repo, and a viewer that does not resolve LFS -- or any clone made with
+# GIT_LFS_SKIP_SMUDGE, which is what CI does -- shows the front page with its hero image
+# broken. A public front page is exactly the file that must not depend on a smudge filter
+# having run. Only `readme-*`: the full-resolution source photographs beside them are large,
+# are not published anywhere, and stay in LFS where they belong.
+assets/readme-*.jpg  -filter -diff -merge -text
+assets/readme-*.png  -filter -diff -merge -text
+
 # Vector/other graphics kept as text on purpose
 *.svg    text eol=lf
 

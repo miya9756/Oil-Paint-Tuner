@@ -181,7 +181,3 @@ secrets.toml
 
 # CI artifact from the parity suites (see .gitlab-ci.yml)
 parity.log
-
-# The auto-research kill switch is a local control file: its presence stops the loop
-# (see docs/spec-auto-research.md). Committing it would stop the loop for good.
-auto-research/STOP
