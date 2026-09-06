@@ -1,0 +1,122 @@
+# ---------------------------------------------------------------------------
+# Line endings & diff behaviour
+# ---------------------------------------------------------------------------
+* text=auto eol=lf
+
+*.sh      text eol=lf
+*.py      text eol=lf diff=python
+*.js      text eol=lf
+*.ts      text eol=lf
+*.jsx     text eol=lf
+*.tsx     text eol=lf
+*.json    text eol=lf
+*.md      text eol=lf diff=markdown
+*.toml    text eol=lf
+*.yml     text eol=lf
+*.yaml    text eol=lf
+*.glsl    text eol=lf
+*.vert    text eol=lf
+*.frag    text eol=lf
+*.wgsl    text eol=lf
+*.c       text eol=lf diff=cpp
+*.h       text eol=lf diff=cpp
+*.cpp     text eol=lf diff=cpp
+*.hpp     text eol=lf diff=cpp
+*.rs      text eol=lf diff=rust
+*.bat     text eol=crlf
+*.cmd     text eol=crlf
+
+# Notebooks: treat as text but suppress noisy diffs
+*.ipynb   text eol=lf -diff
+
+# Lockfiles: text, but keep them out of diffs/merges by hand
+uv.lock        text eol=lf -diff
+poetry.lock    text eol=lf -diff
+Cargo.lock     text eol=lf -diff
+package-lock.json text eol=lf -diff linguist-generated
+pnpm-lock.yaml text eol=lf -diff linguist-generated
+yarn.lock      text eol=lf -diff linguist-generated
+
+# ---------------------------------------------------------------------------
+# Git LFS -- binary assets
+# ---------------------------------------------------------------------------
+# Reference / input imagery
+*.png    filter=lfs diff=lfs merge=lfs -text
+*.jpg    filter=lfs diff=lfs merge=lfs -text
+*.jpeg   filter=lfs diff=lfs merge=lfs -text
+*.tif    filter=lfs diff=lfs merge=lfs -text
+*.tiff   filter=lfs diff=lfs merge=lfs -text
+*.exr    filter=lfs diff=lfs merge=lfs -text
+*.hdr    filter=lfs diff=lfs merge=lfs -text
+*.psd    filter=lfs diff=lfs merge=lfs -text
+*.webp   filter=lfs diff=lfs merge=lfs -text
+*.bmp    filter=lfs diff=lfs merge=lfs -text
+*.gif    filter=lfs diff=lfs merge=lfs -text
+
+# PUBLISHED page assets are deliberately NOT LFS, and this is a correctness rule rather
+# than a size preference. .gitlab-ci.yml sets GIT_LFS_SKIP_SMUDGE=1 on the stated premise
+# that nothing published is LFS-tracked; an LFS-tracked file under web/tune/ would therefore
+# reach the deploy tree as a 130-byte pointer stub and be published as the sample image.
+# build_static.py's pointer check turns that into a failed deploy rather than a broken page,
+# but the right fix is for the bytes to be in the repo in the first place. This is also the
+# case the LFS caution below describes: one small file that every CI checkout needs.
+# -text is load-bearing: the `* text=auto eol=lf` rule at the top of this file would
+# otherwise apply eol normalisation to a JPEG and corrupt it on checkout.
+web/tune/*.jpg  -filter -diff -merge -text
+web/tune/*.png  -filter -diff -merge -text
+
+# Vector/other graphics kept as text on purpose
+*.svg    text eol=lf
+
+# Video / animation results
+*.mp4    filter=lfs diff=lfs merge=lfs -text
+*.mov    filter=lfs diff=lfs merge=lfs -text
+*.webm   filter=lfs diff=lfs merge=lfs -text
+*.avi    filter=lfs diff=lfs merge=lfs -text
+
+# Numerical arrays / brush + pigment datasets
+#
+# CAUTION: these globs are a fresh-repo default and are deliberately broad. LFS pays off
+# for a FEW LARGE files, not many small ones -- many small LFS objects are re-downloaded on
+# every CI checkout against a bandwidth quota, for no packing benefit. A paint sim naturally
+# produces many small per-stroke/per-tile arrays, so once the data layout settles, re-scope
+# these to the paths that actually hold large files. *.npy and *.bin are the two to watch.
+# See .claude/skills/sibling-repos/SKILL.md.
+*.npy    filter=lfs diff=lfs merge=lfs -text
+*.npz    filter=lfs diff=lfs merge=lfs -text
+*.h5     filter=lfs diff=lfs merge=lfs -text
+*.hdf5   filter=lfs diff=lfs merge=lfs -text
+*.parquet filter=lfs diff=lfs merge=lfs -text
+*.pkl    filter=lfs diff=lfs merge=lfs -text
+*.bin    filter=lfs diff=lfs merge=lfs -text
+*.safetensors filter=lfs diff=lfs merge=lfs -text
+*.pt     filter=lfs diff=lfs merge=lfs -text
+*.pth    filter=lfs diff=lfs merge=lfs -text
+*.onnx   filter=lfs diff=lfs merge=lfs -text
+
+# 3D / geometry
+*.obj    filter=lfs diff=lfs merge=lfs -text
+*.ply    filter=lfs diff=lfs merge=lfs -text
+*.glb    filter=lfs diff=lfs merge=lfs -text
+*.gltf   filter=lfs diff=lfs merge=lfs -text
+
+# Fonts
+*.woff   filter=lfs diff=lfs merge=lfs -text
+*.woff2  filter=lfs diff=lfs merge=lfs -text
+*.ttf    filter=lfs diff=lfs merge=lfs -text
+*.otf    filter=lfs diff=lfs merge=lfs -text
+
+# Archives
+*.zip    filter=lfs diff=lfs merge=lfs -text
+*.tar.gz filter=lfs diff=lfs merge=lfs -text
+*.7z     filter=lfs diff=lfs merge=lfs -text
+
+# Prebuilt WASM, IF you choose to commit it (also un-ignore in .gitignore)
+*.wasm   filter=lfs diff=lfs merge=lfs -text
+
+# ---------------------------------------------------------------------------
+# Linguist hints
+# ---------------------------------------------------------------------------
+*.glsl linguist-language=GLSL
+*.wgsl linguist-language=WGSL
+web/vendor/** linguist-vendored

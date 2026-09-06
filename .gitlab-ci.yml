@@ -1,0 +1,101 @@
+# CI/CD for git.drz.li (self-hosted GitLab) -- the remote this repo actually pushes to.
+#
+# GitLab reads this file and ignores `.github/`, so a workflow copied from a GitHub repo
+# would never run. The `pages` rule below keys on `$CI_DEFAULT_BRANCH` rather than naming a
+# branch, so it does not care that this repo's default is `main` where the repo it was split
+# from used `master`.
+#
+# What runs: the whole suite. It is torch-free, GPU-free, needs no asset and finishes in
+# seconds -- there is nothing in this repo that belongs on the cluster instead.
+
+stages:
+  - test
+  - deploy
+
+default:
+  image: python:3.11-slim
+  interruptible: true
+
+variables:
+  # Nothing published is LFS-tracked -- the deployed tree is HTML, JS and the package's own
+  # .py files. Skipping the smudge keeps the clone quick, and `build_static.py` fails the
+  # build if a pointer stub ever reaches the deploy tree anyway, so this cannot silently
+  # publish a page made of pointer files.
+  GIT_LFS_SKIP_SMUDGE: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+.env: &env
+  before_script:
+    # node runs the REAL web/tune/oilpaint/*.js for the parity suites. They SKIP when node
+    # is missing, which would leave this job green while the entire JS port went unchecked
+    # against the Python it mirrors -- so node is installed and its presence asserted, not
+    # hoped for (.claude/skills/python-js-parity/SKILL.md, "CI").
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends nodejs >/dev/null
+    - node --version
+    # Pinned below 2.0 to match the numpy the reference is developed against, so CI
+    # measures the same floats the developer does. numpy's version is load-bearing here:
+    # web/tune/oilpaint/ziggurat_tables.js is EXTRACTED from the installed binary.
+    - pip install --quiet "numpy<2" pillow
+
+test:
+  stage: test
+  <<: *env
+  script:
+    # Core invariants: 31 tests, 258 synthetic checks, seconds.
+    - python tests/test_core.py
+    # The three parity suites, which are what hold web/tune/oilpaint/*.js to oilpaint/*.py:
+    #   rng      -- nprandom.js reproduces numpy's PCG64 and ziggurat bit for bit. Run
+    #               FIRST: every other parity result is meaningless if the stroke jitter
+    #               comes from a different stream.
+    #   raster   -- render.js vs render.py over the branches a single painting misses.
+    #   pipeline -- every stage, the whole painting, and the real engine.worker.js.
+    #
+    # `set -o pipefail` plus the SKIP guard: each suite exits 0 when node is missing, and a
+    # skip nobody notices is how a suite goes green while checking nothing.
+    - set -o pipefail
+    - python tests/test_rng_parity.py | tee -a parity.log
+    - python tests/test_raster_parity.py | tee -a parity.log
+    - python tests/test_pipeline_parity.py | tee -a parity.log
+    - |
+      if grep -q '^SKIP' parity.log; then
+        echo "ERROR: a parity suite SKIPPED in CI."
+        echo "node is installed above, so this means it was not found -- the JS port went"
+        echo "unchecked against the Python it mirrors. Fix the runner, do not ignore this."
+        exit 1
+      fi
+    # Static checks for the page. There is no build step for the HTML, so this is the only
+    # thing that catches a broken edit to it.
+    - python web/tune/verify_page.py
+    # The deploy tree must assemble and verify here, not for the first time in the `pages`
+    # job -- a failure on a topic branch should be visible before it reaches master.
+    - python web/tune/build_static.py --dist public
+  artifacts:
+    when: always
+    paths:
+      - parity.log
+    expire_in: 1 week
+
+# GitLab Pages: the job must be called `pages` and the site must end up in `public/`.
+# build_static.py assembles that tree itself -- page, worker, the JS package, and the
+# schema.json it generates from oilpaint/schema.py -- so there is nothing to hand-copy and
+# no path rewriting. It also re-runs its own verification, so a tree that cannot boot fails
+# the job instead of replacing the live site.
+pages:
+  stage: deploy
+  <<: *env
+  script:
+    - python web/tune/build_static.py --dist public
+    - test -f public/index.html
+    - test -f public/engine.worker.js
+    - test -f public/schema.json                   # generated from oilpaint/schema.py
+    - test -f public/oilpaint/pipeline.js          # the worker's relative imports must resolve
+    - test -f public/oilpaint/render.js
+    - test -f public/oilpaint/nprandom.js
+    - du -sh public && find public -type f | sort
+  artifacts:
+    paths:
+      - public
+  rules:
+    # Publish only from the default branch: a Pages deploy is public within the instance and
+    # overwrites the live site, so a topic branch must not be able to trigger one.
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH

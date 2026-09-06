@@ -1,0 +1,6 @@
+{
+  "//": "Not a build step and not a dependency list -- there are none. This exists only so node treats `raster.js` as an ES module, which is what the browser already does for a <script type=module>. Without it, tests/test_raster_parity.py cannot import the real shipped file and would have to test a transcription of it instead. Not copied into the deployed tree.",
+  "name": "oil-paint-tuner",
+  "private": true,
+  "type": "module"
+}

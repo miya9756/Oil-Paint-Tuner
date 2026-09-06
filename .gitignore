@@ -1,0 +1,187 @@
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.python-version
+.conda/
+conda-meta/
+
+# Package managers / caches
+.uv/
+uv.lock.bak
+pip-log.txt
+pip-delete-this-directory.txt
+.pdm-python
+__pypackages__/
+
+# Testing / linting / typing
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+*.cover
+.tox/
+.nox/
+.hypothesis/
+
+# Notebooks
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+profile_default/
+ipython_config.py
+
+# ---------------------------------------------------------------------------
+# JavaScript / TypeScript / web
+# ---------------------------------------------------------------------------
+node_modules/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Build output (bundlers: vite / webpack / parcel / next / rollup)
+dist/
+dist-ssr/
+build/
+out/
+# `web/tune/build_static.py --dist public` assembles the deployed tuner here, and the
+# `pages` job rebuilds it in CI. It is generated from tracked sources every time; a
+# committed copy would just go stale against the page it was built from.
+/public/
+.next/
+.nuxt/
+.svelte-kit/
+.parcel-cache/
+.cache/
+.vite/
+*.local
+
+# ---------------------------------------------------------------------------
+# WASM toolchains
+# ---------------------------------------------------------------------------
+# Rust / wasm-pack / wasm-bindgen
+target/
+Cargo.lock.bak
+pkg/
+wasm-pack.log
+
+# Emscripten
+.emscripten_cache/
+.emscripten_ports/
+emsdk/
+*.wasm.map
+*.worker.js.map
+
+# Generated glue code is usually a build artifact, not source.
+# If you decide to commit prebuilt wasm, un-ignore explicitly, e.g.:
+#   !web/public/wasm/oilpaint.wasm
+*.wasm
+*.wast
+
+# ---------------------------------------------------------------------------
+# Project data & outputs
+# ---------------------------------------------------------------------------
+# Large / regenerable artifacts from the paint simulation.
+data/raw/
+data/interim/
+data/cache/
+out/
+outputs/
+renders/
+frames/
+checkpoints/
+logs/
+runs/
+wandb/
+mlruns/
+*.mp4
+*.avi
+*.mov
+*.gif.tmp
+
+# data/samples/ holds local test images copied from the site repo, including a personal
+# photograph. Ignored by default rather than pushed to LFS on a shared remote -- un-ignore
+# deliberately if a curated, publishable test set is wanted here.
+data/samples/
+
+# Note: assets/ is intentionally NOT ignored -- small curated inputs live there and are
+# tracked through Git LFS (see .gitattributes).
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ---------------------------------------------------------------------------
+# Secrets / local config
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.toml
+.secrets/
+
+# CI artifact from the parity suites (see .gitlab-ci.yml)
+parity.log
+
+# The auto-research kill switch is a local control file: its presence stops the loop
+# (see docs/spec-auto-research.md). Committing it would stop the loop for good.
+auto-research/STOP
