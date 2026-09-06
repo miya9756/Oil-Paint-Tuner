@@ -1,0 +1,159 @@
+# CI/CD for GitHub: test everything, then publish the tuner to this repo's GitHub Pages.
+#
+# THIS FILE AND `.gitlab-ci.yml` BOTH LIVE HERE ON PURPOSE, and neither is a copy of the
+# other going stale. GitHub reads `.github/workflows/` and ignores `.gitlab-ci.yml`; GitLab
+# does the reverse. The repo is pushed to whichever remote it is pushed to, and the same
+# commit tests and deploys correctly on either. What they share is the ARGUMENT -- the node
+# assertion, the pinned numpy, the LFS premise -- and each states it where it applies.
+#
+# One-time repo setting this depends on: Settings -> Pages -> Source must be
+# "GitHub Actions". Without it the deploy job fails with a permissions error rather than
+# publishing to a branch nobody watches.
+name: test and deploy
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+# A push that supersedes another cancels its TEST run, because a result for a commit nobody
+# is on any more is wasted minutes. The Pages deploy has the opposite rule and sets its own
+# concurrency below: cancelling a half-finished deploy is how a site ends up part-published.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # NOTHING PUBLISHED IS LFS-TRACKED, and that is a rule the repo enforces rather
+          # than a hope: .gitattributes explicitly un-tracks `web/tune/*.jpg|png` so the
+          # sample image is real bytes in the repo, and build_static.py fails the build if
+          # an unsmudged pointer stub ever reaches the deploy tree. So a clone without LFS
+          # is a complete clone for every purpose this workflow has.
+          lfs: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # node runs the REAL web/tune/oilpaint/*.js for the parity suites and the page
+      # harness. Installed explicitly rather than leaned on: the runner image happens to
+      # ship one, and a workflow whose correctness depends on that is one image update away
+      # from silently skipping the checks it exists to run.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: install
+        # numpy is PINNED BELOW 2.0, and this is load-bearing rather than caution:
+        # web/tune/oilpaint/ziggurat_tables.js is EXTRACTED from the installed numpy binary
+        # (gen_ziggurat.py), so CI has to measure the same floats the tables came from.
+        # Reconstructing those tables analytically gets every entry right to ~1e-10 and
+        # still changes 99.6% of normal draws -- which is why this is a version pin and not
+        # a preference.
+        run: pip install --quiet "numpy<2" pillow
+
+      - name: node is really here
+        run: node --version
+
+      # Core invariants: synthetic, seeded, seconds. Includes the project-format round trip.
+      - name: core invariants
+        run: python tests/test_core.py
+
+      # The three parity suites, which are what hold web/tune/oilpaint/*.js to oilpaint/*.py:
+      #   rng      -- nprandom.js reproduces numpy's PCG64 and ziggurat bit for bit. FIRST:
+      #               every other parity result is meaningless if the stroke jitter comes
+      #               from a different stream.
+      #   raster   -- render.js vs render.py over the branches one painting misses.
+      #   pipeline -- every stage, the whole painting, and the real engine.worker.js.
+      #
+      # THE SKIP GUARD IS THE POINT OF THIS STEP. Each suite exits 0 when node is missing,
+      # so without the guard a runner without node leaves this job green while the entire JS
+      # port goes unchecked against the Python it mirrors. A skip nobody notices is worse
+      # than a failure.
+      - name: parity suites
+        run: |
+          set -o pipefail
+          python tests/test_rng_parity.py      | tee -a parity.log
+          python tests/test_raster_parity.py   | tee -a parity.log
+          python tests/test_pipeline_parity.py | tee -a parity.log
+          if grep -q '^SKIP' parity.log; then
+            echo "ERROR: a parity suite SKIPPED in CI."
+            echo "node is installed above, so this means it was not found -- the JS port"
+            echo "went unchecked against the Python it mirrors. Fix the runner, do not"
+            echo "ignore this."
+            exit 1
+          fi
+
+      # There is no build step for the page, so this is the only thing that catches a broken
+      # edit to it -- including the one dynamic check, which shims the DOM and works the
+      # page's own controls. It also loads every committed example project.
+      - name: page checks
+        run: python web/tune/verify_page.py
+
+      # The deploy tree must assemble and verify HERE, not for the first time in the deploy
+      # job: a failure on a topic branch should be visible before it can reach the default
+      # branch, and this is the step that makes a broken tree a red PR rather than a broken
+      # site.
+      - name: build the static tree
+        # build_static.py runs its own verification -- relative worker path, no root-absolute
+        # paths, no surviving fetch('/render'), no unsmudged LFS pointer -- and fails the job
+        # rather than assembling a tree that cannot boot. The explicit tests after it are the
+        # same belt-and-braces `.gitlab-ci.yml` carries, kept in step so the two configs can
+        # be read against each other: they name the files whose ABSENCE would still produce a
+        # plausible-looking directory.
+        run: |
+          python web/tune/build_static.py --dist public
+          test -f public/index.html
+          test -f public/engine.worker.js
+          test -f public/schema.json              # generated from oilpaint/schema.py
+          test -f public/oilpaint/pipeline.js     # the worker's relative imports must resolve
+          test -f public/oilpaint/render.js
+          test -f public/oilpaint/nprandom.js
+          du -sh public
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: parity-log
+          path: parity.log
+          retention-days: 7
+
+      # Uploaded only from the branch that can deploy, so a topic branch does not spend time
+      # packaging a tree nothing will publish.
+      - name: package for Pages
+        if: github.ref_name == github.event.repository.default_branch
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: test
+    # PUBLISH ONLY FROM THE DEFAULT BRANCH. A Pages deploy overwrites the live site, so a
+    # topic branch must not be able to trigger one. Keyed on the repository's OWN default
+    # rather than the literal "main", so renaming the branch does not silently stop
+    # deploys -- the same reasoning .gitlab-ci.yml uses with $CI_DEFAULT_BRANCH.
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    # NOT cancel-in-progress. Two pushes in quick succession should publish in order; killing
+    # a deploy halfway is how a site ends up part-published, with a new index.html over an
+    # old worker.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

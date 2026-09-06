@@ -151,6 +151,21 @@ class Handler(BaseHTTPRequestHandler):
         # lets this port preview the SOURCE tree with no build step.
         if path in ("/schema.json", "/schema"):
             return self._send(200, schema_dict())
+        # The opening project, for the same reason schema.json is here: it lives in
+        # examples/ and build_static.py copies it into the deploy tree under this name, so a
+        # plain file server pointed at web/tune/ would 404 it and this port would open on a
+        # different painting from the deployed page. Read per request, like index.html, so
+        # editing the example is visible on a refresh.
+        if path == "/sample-project.json":
+            try:
+                with open(os.path.join(_ROOT, "examples",
+                                       "mountain-valley.oilpaint.json"),
+                          encoding="utf-8") as fh:
+                    return self._send(200, json.load(fh))
+            except OSError:
+                # A missing example must not take the page down: it opens on the photograph
+                # with the engine's own defaults, which is what it did before this existed.
+                return self._send(404, {"error": "no sample project"})
         # The page is the static one now: it starts engine.worker.js and imports
         # oilpaint/*.js by relative path, and does the compute in the browser. Those have
         # to be served or the worker dies on its first import.

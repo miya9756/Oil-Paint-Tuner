@@ -45,6 +45,14 @@ ASSETS = ["index.html", "engine.worker.js", "session.js"]
 # opens; it is excluded from Git LFS in .gitattributes, which explains why.
 MEDIA = ["sample.jpg"]
 PACKAGE = "oilpaint"  # web/tune/oilpaint/*.js -- every .js in it ships
+# THE SETUP THE PAGE OPENS WITH, copied out of examples/ rather than kept as a second copy
+# under web/tune/. It is the same file `scripts/paint.py --project` takes and the same one
+# verify_page.py checks, so the painting a visitor meets on the deployed page is one they can
+# reproduce on the command line -- which is most of the point of having a project format at
+# all. Renamed on the way in: the page asks for a stable name, and WHICH example is the
+# opening one is a decision for this file rather than a string buried in the page.
+SAMPLE_PROJECT = os.path.join(ROOT, "examples", "mountain-valley.oilpaint.json")
+SAMPLE_PROJECT_AS = "sample-project.json"
 
 
 def build(dist):
@@ -62,6 +70,7 @@ def build(dist):
 
     for name in ASSETS + MEDIA:
         shutil.copy2(os.path.join(HERE, name), os.path.join(dist, name))
+    shutil.copy2(SAMPLE_PROJECT, os.path.join(dist, SAMPLE_PROJECT_AS))
 
     with open(os.path.join(dist, "schema.json"), "w", encoding="utf-8") as fh:
         json.dump(as_dict(), fh, indent=1)
@@ -83,7 +92,7 @@ def verify(dist, modules):
         if not ok:
             fails.append(label)
 
-    for name in ASSETS + MEDIA + ["schema.json"]:
+    for name in ASSETS + MEDIA + ["schema.json", SAMPLE_PROJECT_AS]:
         p = os.path.join(dist, name)
         check(os.path.exists(p) and os.path.getsize(p) > 0, f"{name} present and non-empty")
     check(len(modules) >= 8, f"the JS package shipped ({len(modules)} modules)",
@@ -156,7 +165,7 @@ def verify(dist, modules):
     total = sum(os.path.getsize(os.path.join(dp, f))
                 for dp, _, fs in os.walk(dist) for f in fs)
     print(f"\n  {len(modules)} JS modules + {len(ASSETS)} assets + {len(MEDIA)} image"
-          f" + schema.json, {total / 1024:.0f} KB")
+          f" + schema.json + the opening project, {total / 1024:.0f} KB")
     print("  (nothing is fetched at runtime -- no CDN, no WASM, no Python)")
     return fails
 

@@ -52,6 +52,15 @@ function makeCtx(el) {
           return { data: bufs.get(key), width: w, height: h };
         };
       }
+      // A REAL BUFFER, because the page writes into one. The proxy's catch-all returns
+      // undefined for anything it does not name, so `createImageData(...).data` threw --
+      // which looked exactly like a page bug and was a gap here. Both mask paths of the
+      // project format go through this: the foveal map is imported by writing alpha and
+      // exported by writing grey.
+      if (k === 'createImageData') {
+        return (w, h) => ({ data: new Uint8ClampedArray(Math.max(1, w * h * 4)),
+                            width: w, height: h });
+      }
       if (k === 'clearRect') return () => bufs.forEach(b => b.fill(0));
       if (k === 'ellipse') return () => { ellipses++; };
       if (k === 'drawImage') return () => { drawImages++; };
@@ -277,8 +286,19 @@ globalThis.FileReader = class {
 // restoreImage() re-fetches the stored data URL and loadSample() fetches the shipped jpeg;
 // both only need a blob with a size, because the bytes go straight back into the shimmed
 // FileReader above.
-globalThis.fetch = async () => ({ ok: true, status: 200,
-                                  blob: async () => ({ size: 4, type: 'image/jpeg' }) });
+// ...and the OPENING PROJECT, which is JSON rather than an image and is the one fetch whose
+// content the page actually reads. Served from the job so the harness can drive both halves
+// of the rule: `sampleProject` present is a deployed page with its example, absent is an
+// older build (or a 404), which must degrade to the photograph and the engine's defaults.
+globalThis.fetch = async (url) => {
+  if (String(url).includes('sample-project.json')) {
+    const doc = job.sampleProject;
+    return { ok: !!doc, status: doc ? 200 : 404, json: async () => doc,
+             blob: async () => ({ size: 4, type: 'application/json' }) };
+  }
+  return { ok: true, status: 200,
+           blob: async () => ({ size: 4, type: 'image/jpeg' }) };
+};
 // requestAnimationFrame is shimmed but never pumped: the only frame the page schedules is
 // the wipe's own drag, which this harness does not start. It exists so that a page CALLING
 // rAF does not throw on a runtime that has none -- which would look like a page bug.
@@ -417,6 +437,15 @@ out.restoredImage = !$('#wipe').hidden;
 out.sourceTag = $('#tagL').textContent;
 out.renders = out.events.filter(e => e.startsWith('render'));
 out.errText = $('#err').textContent;
+// 1b. THE OPENING PROJECT. A page whose first frame is a photograph with default settings
+//     undersells the tool; a page that overwrote a returning visitor's tuning with an
+//     example would be far worse. Both halves are read from the FIRST render of the
+//     session, because that is the frame the argument is about -- and the two runs of this
+//     harness already are the two cases: cold has no stored setup and gets the sample plus
+//     its project, warm has one and must keep it.
+out.openingWire = (out.renders[0] || '');
+out.openingLayers = ($('#rgnLayers')._kids || []).map(r => r.dataset.id);
+out.openingStatus = $('#status').textContent;
 
 // 1c. THE CARDS. Which control sits on which card is decided by FRONT_GROUPS, HIDDEN and
 //     FINE in the page, and the only way to see the decision is to build the panel.

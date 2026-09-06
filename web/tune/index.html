@@ -885,6 +885,8 @@ import { saveSetup, loadSetup, saveImage, loadImage,
 
 const $ = s => document.querySelector(s);
 let SCHEMA = [], DEFAULTS = {}, params = {}, haveImage = false, lastPng = null;
+// Set by boot() before anything can read it; see there for what it means.
+let freshVisit = false;
 // The one-line note under each card heading, from the engine. Empty against an engine
 // older than they are, which degrades to the bare headings the page always had.
 let GROUP_NOTES = {};
@@ -1232,6 +1234,11 @@ async function boot(restore = true){
   // renders with the value it is actually going to paint with. `restore` is false for the
   // Defaults button, which must mean defaults and not "whatever I had last time".
   const saved = restore ? loadSetup() : null;
+  // WHETHER THIS IS SOMEBODY'S FIRST TIME HERE, which is the one question the opening
+  // project is allowed to act on. Keyed on the stored SETUP rather than the stored image:
+  // a visitor who cleared the picture but kept their tuning still has work to lose, and an
+  // example overwriting it is the one outcome that feature must never produce.
+  freshVisit = !saved;
   params = Object.assign({}, DEFAULTS, (saved && saved.params) || {});
   // A CONTROL WITH NO NUMBER BEHIND IT, repaired rather than reported-and-limped-on.
   //
@@ -3590,7 +3597,7 @@ window.addEventListener('paste', e => {
   if(it) upload(it.getAsFile());
 });
 
-function upload(f, restoring = false){
+function upload(f, restoring = false, after = null){
   setStatus('reading image...', true);
   const fr = new FileReader();
   fr.onload = async () => {
@@ -3648,6 +3655,12 @@ function upload(f, restoring = false){
     // what is coming.
     if(!looksOff) $('#looks').hidden = false;
     setStatus('');
+    // `after` is the opening project -- see loadSample. It runs HERE, and not before the
+    // upload, because the masks it carries are drawn onto canvases that do not exist until
+    // `maskInit`/`rgnInit` have sized them to this photograph's aspect. It ends in its own
+    // `schedule()`, so returning true means "a render is already coming": rendering again
+    // would paint the ungraded picture first and throw it away 160 ms later.
+    if(after && await after()) return;
     render();
   };
   fr.readAsDataURL(f);
@@ -4170,13 +4183,23 @@ async function importProject(doc){
   regionLayers = rgnAdopt(doc.regions || {});
   regionSel = [0];
   vortices = vtxAdopt(doc.vortices || {});
+  // EACH MASK IS ITS OWN BEST-EFFORT STEP. A mask that will not decode must not take the
+  // rest of the project with it: the fields and the layers are already applied by here, and
+  // abandoning them would turn "one of your two masks is corrupt" into "nothing loaded",
+  // which is the harder failure to diagnose and the more annoying one to recover from.
+  // Found by the harness, which had no `createImageData` and so made the foveal step throw
+  // -- the panel then kept a layer list the wire had already moved past.
   if(doc.masks && doc.masks.regions && regionCtx){
-    await drawInto(doc.masks.regions, regionCanvas, regionCtx);
-    regionKey++;
-    rgnScan();
-    saveRegionMask(regionCanvas.toDataURL('image/png'));
+    try{
+      await drawInto(doc.masks.regions, regionCanvas, regionCtx);
+      regionKey++;
+      rgnScan();
+      saveRegionMask(regionCanvas.toDataURL('image/png'));
+    }catch(e){ /* the layers stay; they simply have no pixels yet */ }
   }
-  if(doc.masks && doc.masks.foveal) await importFoveal(doc.masks.foveal);
+  if(doc.masks && doc.masks.foveal){
+    try{ await importFoveal(doc.masks.foveal); }catch(e){ /* the map stays unpainted */ }
+  }
   // The panel is REBUILT rather than poked row by row: a project can move any of forty
   // fields plus every layer, and `boot(false)` is already the one path that puts a whole
   // parameter set on screen -- but it would reload the image and re-seed from storage, so
@@ -4252,18 +4275,53 @@ $('#rgnFile').addEventListener('change', async e => {
 // source tag and the wipe. A second load path is how the source pane and the renderer come
 // to disagree about which bytes are being painted.
 //
-// 1600px on the long side, which is a deliberate pick rather than the original 2040: the
-// preview is capped at PREVIEW_CAP anyway, so the two are pixel-identical on screen, and
-// this keeps the deployed page at ~500 KB instead of ~650 KB. "full res" still has
-// somewhere to go. Re-encode from assets/0465.png if a different trade is wanted.
+// THE PAGE OPENS ON A PAINTING, NOT ON A PHOTOGRAPH. `sample.jpg` is assets/0201.png at
+// 1400px on the long side -- a deliberate pick rather than the original 2040: the preview is
+// capped at PREVIEW_CAP anyway, so the two are pixel-identical on screen, and this keeps the
+// deployed page under 900 KB while leaving "full res" somewhere to go. Re-encode from
+// assets/0201.png if a different trade is wanted.
+//
+// `sample-project.json` is examples/mountain-valley.oilpaint.json, copied into the deploy
+// tree by build_static.py and synthesised by serve_tune.py, so both front doors open on the
+// same picture. It matters that it is the SAME FILE rather than a second copy: what a
+// visitor meets on the deployed page is then something they can reproduce exactly with
+// `scripts/paint.py --project`, which is most of the point of having a project format.
+//
+// A default that shows the tool doing nothing undersells it -- three passages, placed
+// swirls and a foveal map say in one glance what forty identifiers cannot.
 const SAMPLE = './sample.jpg';
+const SAMPLE_PROJECT = './sample-project.json';
+
+/** The opening project, applied ONLY on a genuinely fresh visit.
+ *
+ *  `freshVisit` is "there was no stored setup", not "there was no stored image": a visitor
+ *  who cleared the picture but kept their tuning would otherwise have it overwritten by an
+ *  example, which is the one outcome this must never produce. Everything else about it is
+ *  best-effort -- a 404, a file that will not parse, an older build serving no project at
+ *  all -- and each degrades to the photograph with the engine's own defaults, which is the
+ *  page as it was before this existed.
+ *
+ *  Returns true when it has scheduled a render, which is what tells `upload` not to. */
+async function openingProject(){
+  if(!freshVisit) return false;
+  try{
+    const r = await fetch(SAMPLE_PROJECT);
+    if(!r.ok) return false;
+    await importProject(await r.json());
+    return true;
+  }catch(e){
+    return false;
+  }
+}
+
 async function loadSample(){
   try{
     const r = await fetch(SAMPLE);
     if(!r.ok) throw new Error('HTTP ' + r.status);
     const b = await r.blob();
     if(!b.size) throw new Error('empty');
-    upload(new File([b], SAMPLE.replace(/^.*\//, ''), {type: b.type || 'image/jpeg'}));
+    upload(new File([b], SAMPLE.replace(/^.*\//, ''), {type: b.type || 'image/jpeg'}),
+           false, openingProject);
   }catch(e){
     // A missing sample must not look like a broken tool. The drop zone IS the empty state
     // and it is still sitting there, so fall back to it silently rather than throwing into

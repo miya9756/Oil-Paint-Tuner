@@ -268,6 +268,16 @@ def page_runtime(node):
     # layouts are driven by the two processes that already run. The shell is where the new
     # arithmetic lives -- the picture sized from the stage's own box rather than from 62vh
     # of the viewport -- and it would otherwise never execute here at all.
+    # THE OPENING PROJECT the deployed page ships, handed to the harness as the deployed
+    # page's own fetch would hand it over. It is read from examples/ rather than restated
+    # here for the same reason build_static.py copies it rather than keeping a second copy:
+    # a check written against a private fixture would pass while the shipped file rotted.
+    try:
+        with open(os.path.join(ROOT, "examples", "mountain-valley.oilpaint.json"),
+                  encoding="utf-8") as fh:
+            base["sampleProject"] = json.load(fh)
+    except OSError:
+        base["sampleProject"] = None
     warm = dict(base, wide=True, localStorage={"oilpaint.setup": setup},
                 indexedDB={"image": {"dataUrl": "data:image/png;base64,AAAA",
                                      "name": "sunset.jpg"}})
@@ -628,23 +638,56 @@ def page_runtime(node):
                   "and it records which photograph it was made for", str(got.source))
         except Exception as e:
             check(False, "and the Python reader accepts it unchanged", f"{type(e).__name__}: {e}")
+    # THE PAGE OPENS ON A PAINTING. The deployed tuner ships the sample photograph AND the
+    # project that turns it into three painted passages, so the first frame says what the
+    # tool does rather than showing a photograph with nothing done to it. Read off the FIRST
+    # render of the session, because that is the frame the argument is about.
+    check("fov=0.5" in (cold.get("openingWire") or "")
+          and "r=1,2" in (cold.get("openingWire") or ""),
+          "a first visit opens on the example project, layers and focus map included",
+          str(cold.get("openingWire")))
+    check(cold.get("openingLayers") == ["2", "1", "0"],
+          "and its layers are on the panel, newest above the base",
+          str(cold.get("openingLayers")))
+    # THE HALF THAT MATTERS MORE. A returning visitor has work in localStorage, and an
+    # example quietly overwriting it is the one outcome this feature must never produce --
+    # so the rule is keyed on the stored SETUP, not on the stored image.
+    check("flow=starry" in (hot.get("openingWire") or "")
+          and "r=" not in (hot.get("openingWire") or ""),
+          "a stored session is NOT overwritten by the opening project",
+          str(hot.get("openingWire")))
+
     # THE COMMITTED EXAMPLE, which is the thing a visitor actually meets. It carries all
     # five parts including two real embedded masks, so it is also the only place the mask
     # half of the format is exercised end to end -- and an example that rots into something
     # the reader refuses is worse than no example, because it is the file people copy.
-    ex = os.path.join(ROOT, "examples", "two-passages.oilpaint.json")
-    if os.path.exists(ex):
-        from oilpaint import project as project_mod  # noqa: E402
+    import glob  # noqa: E402
+    from oilpaint import project as project_mod  # noqa: E402
+    # EVERY example, found rather than named: a check that knows one filename goes quiet the
+    # day somebody adds a second one, which is exactly when it starts being worth having.
+    found = sorted(glob.glob(os.path.join(ROOT, "examples", "*.oilpaint.json")))
+    check(bool(found), "there is at least one committed example to check")
+    for ex in found:
+        name = os.path.basename(ex)
         try:
-            p = project_mod.load(ex)
-            check(p.region_mask is not None and p.foveal is not None
-                  and bool(p.overrides) and bool(p.vortices) and bool(p.params),
-                  "the committed example still carries all five parts",
-                  f"masks={p.region_mask is not None},{p.foveal is not None} "
-                  f"layers={sorted(p.overrides)} swirls={list(p.vortices)}")
+            pr = project_mod.load(ex)
+            check(pr.region_mask is not None and pr.foveal is not None
+                  and bool(pr.overrides) and bool(pr.vortices) and bool(pr.params),
+                  f"{name} still carries all five parts",
+                  f"masks={pr.region_mask is not None},{pr.foveal is not None} "
+                  f"layers={sorted(pr.overrides)} swirls={sorted(pr.vortices)}")
+            # The mask has to still contain the passages the file grades, or the example
+            # quietly demonstrates nothing: a layer with no pixels paints exactly like a
+            # layer that was never there.
+            import numpy as np  # noqa: E402
+            from oilpaint.regions import labels_from_image  # noqa: E402
+            lab = labels_from_image(np.asarray(pr.region_mask, dtype="float32") / 255.0)
+            present = set(np.unique(lab).tolist())
+            missing = sorted(r for r in pr.overrides if r not in present)
+            check(not missing, f"{name}'s mask contains every passage it grades",
+                  f"graded {sorted(pr.overrides)}, mask has {sorted(present)}")
         except Exception as e:
-            check(False, "the committed example still carries all five parts",
-                  f"{type(e).__name__}: {e}")
+            check(False, f"{name} loads", f"{type(e).__name__}: {e}")
 
     # THE WAY BACK IN, read off the wire: a page that moved its own panel and never told the
     # engine looks identical from the panel.

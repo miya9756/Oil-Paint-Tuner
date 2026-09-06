@@ -11,8 +11,14 @@ reasoning. The short version is below.
 ## Try it
 
 ```bash
+# over the photograph it was made for (DIV2K 0201) ...
+python scripts/paint.py assets/0201.png out.png \
+    --project examples/mountain-valley.oilpaint.json --max-side 900
+
+# ... or over the one in this repo. That is not a fallback, it is the point: a project is
+# a recipe, so it runs over any photograph and the passages land where the mask puts them.
 python scripts/paint.py web/tune/sample.jpg out.png \
-    --project examples/two-passages.oilpaint.json --max-side 900
+    --project examples/mountain-valley.oilpaint.json --max-side 900
 ```
 
 Any flag still wins over the file, so a project is a starting point rather than a fixed
@@ -20,7 +26,7 @@ recipe:
 
 ```bash
 python scripts/paint.py web/tune/sample.jpg out.png \
-    --project examples/two-passages.oilpaint.json --target-n 12000 --seed 3
+    --project examples/mountain-valley.oilpaint.json --target-n 12000 --seed 7
 ```
 
 Or drop the `.json` straight onto the tuner page.
@@ -83,7 +89,22 @@ A mask painted elsewhere goes in through the tuner's **Load mask** button, or th
 
 | file | what it shows |
 | --- | --- |
-| `two-passages.oilpaint.json` | two painted passages over an impressionist base — a starry sky and a woven foreground — with three placed swirl centres and a foveal map. Both masks embedded. |
+| `mountain-valley.oilpaint.json` | three passages over one mountain valley — a van Gogh sky with four placed swirl centres, a Monet foreground of short woven dabs, and the limestone between them left on the base grade. Plus a foveal map that spends the budget on the valley mouth rather than on the fern texture in the corners. Both masks embedded, 24 KB. |
+
+Its photograph is [`assets/0201.png`](../assets/0201.png) — **DIV2K 0201**, from the public
+super-resolution dataset, and a sibling of the `assets/0465.png` already in this repo. It
+lives in Git LFS like every other source photograph here, so a clone with LFS installed (or
+`git lfs pull`) is what fetches it.
+
+You do not need it to use the project, and nothing in CI does either — the workflow checks
+out with `lfs: false`, on the premise that nothing *published* is LFS-tracked. The project
+file is 24 KB of JSON with both masks inside it.
+
+The masks were not painted by hand. They were classified from the photograph on `g − b`,
+green against blue, which separates all three passages cleanly — sky −0.10, limestone +0.09,
+sunlit fern +0.22. Worth knowing if you build one the same way: the obvious test, *green >
+red*, selects almost nothing here, because sunlit autumn fern is **red-dominant** (r 0.449,
+g 0.411). That is the kind of thing you find by measuring rather than by assuming.
 
 `verify_page.py` loads every example and fails if one stops carrying what it claims, because
 an example that has rotted is worse than none: it is the file people copy.

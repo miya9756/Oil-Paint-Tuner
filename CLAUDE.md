@@ -97,7 +97,7 @@ conda run -n 4dre python scripts/paint.py IN.jpg OUT.png --flow starry --regions
 # masks. This is what the tuner's "Save project" writes and what a dropped .json opens,
 # so a painting moves between the browser and the CLI without being retyped. Any flag
 # still wins over the file.
-conda run -n 4dre python scripts/paint.py IN.jpg OUT.png     --project examples/two-passages.oilpaint.json --target-n 12000
+conda run -n 4dre python scripts/paint.py IN.jpg OUT.png     --project examples/mountain-valley.oilpaint.json --target-n 12000
 
 # how much each Palette / Flow trim moves the picture, as a number. This is what decided
 # which rows sit on the tuner's front cards and which fold into Advanced (FINE in index.html)
