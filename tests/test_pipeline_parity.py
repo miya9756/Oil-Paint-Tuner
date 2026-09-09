@@ -1048,6 +1048,13 @@ def main():
         # settings -- byte for byte, at 8 bits.
         lit = replace(cfg_flow, light_deg=42.0, gloss=0.7)
         lref8 = (np.clip(paint(img, lit)[0], 0, 1) * 255.0 + 0.5).astype(np.uint8)
+        studio = got.get("studio", {})
+        check(studio.get("present") and studio.get("size") == [W, H],
+              "studio surface belongs to the completed render and has its dimensions")
+        check(studio.get("colors") == W * H * 4 and studio.get("normals") == W * H * 16
+              and studio.get("finite"), "studio color and normal buffers are complete and finite")
+        check(studio.get("staleRejected"), "studio refuses a surface for an obsolete render")
+
         if wk.get("relitPixels"):
             check(wk["relitFast"] is True,
                   "the relight actually skipped the rasteriser rather than quietly "

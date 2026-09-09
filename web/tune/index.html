@@ -7,7 +7,7 @@
 <!-- Page-chrome trio, per .claude/skills/ship-to-site/SKILL.md: theme-color, color-scheme
      and a background on `html` (not just body). A local tool rather than a page on the
      public site, but the trio costs nothing and the habit is the point. -->
-<meta name="theme-color" content="#f4f2ec">
+<meta name="theme-color" content="#efeee9">
 <style>
 :root{
   color-scheme: light;
@@ -18,8 +18,6 @@
      a little over the 258px a control card asks for, so a single column has room for its
      labels without a second one trying to form. */
   --rail:340px;
-  /* The left rail, which holds Allocation alone and so needs less than the right. */
-  --lrail:280px;
 }
 html{background:var(--bg)}
 *{box-sizing:border-box}
@@ -519,99 +517,7 @@ footer{text-align:center;color:var(--dim);font-size:11.5px;padding:16px 18px 26p
 footer a{color:inherit;text-decoration:underline;text-underline-offset:2px}
 footer a:hover{color:var(--accent)}
 
-/* ---- the app shell -------------------------------------------------------------------
-   THE STACKED LAYOUT WASTES A PC SCREEN THREE WAYS, and only one of them is obvious.
-
-     - `sizeWipe` caps the picture at 62vh, so on any landscape frame the HEIGHT decides
-       the WIDTH. Measured on a 1205x882 window with a 1.3 frame: the stage is 1150 wide
-       and the picture uses 733 of it. 420px of empty surface, 37% of the stage, produced
-       by a height cap that was chosen for a layout where the panel sat underneath.
-     - `.shell` stops at 1180px, so a 2560px monitor donates another 1380 to the margins.
-     - the cards are a page below the picture. The sticky stage keeps the viewer on screen
-       while they are reached, but the panel still only ever gets the leftovers.
-
-   The comment on `.cards` rejects a side panel because "the panel was taller than the
-   picture it controls". That was true and it is no longer the objection it was: it holds
-   only while the panel and the picture share ONE scroll context. Give the panel its own
-   and its height stops being a layout fact at all -- which is the whole content of every
-   docked properties rail in Photoshop, Lightroom and Illustrator.
-
-   So at a wide enough window this becomes an application rather than a document: the page
-   itself does not scroll, the canvas fills what is left after the rail, and the rail
-   scrolls alone. Below that threshold nothing changes -- `.pane` and `.rail` lay out as
-   the plain blocks they are, in the order the page always had.
-
-   WHY A CLASS AND NOT A MEDIA QUERY. The threshold has to be known in two places -- the
-   layout, and sizeWipe, which sizes the picture from what the rail leaves -- and a number
-   written twice is a number that will disagree with itself. `shellSync` owns it, tests it
-   with matchMedia and stamps `body.shell`; every rule below keys on the stamp. */
-body.shell{height:100dvh;overflow:hidden;display:flex;flex-direction:column}
-body.shell .shell{flex:1;min-height:0;max-width:none;padding:10px 14px 0;
-  display:grid;grid-template-columns:1fr 7px var(--rail,340px);
-  grid-template-rows:auto 1fr;column-gap:0;row-gap:8px}
-/* THREE COLUMNS: a panel, the picture, a panel -- Lightroom's shape rather than
-   Photoshop's, because there are two things here that want to be permanently visible and
-   they answer different questions. Explicit `grid-column` on every child, so the DOM order
-   can stay the one the stacked layout needs: `#leftRail` sits AFTER `.pane` in the markup
-   (nothing about Allocation belongs above the picture when the page is one column) and is
-   placed into the first column here. */
-body.shell.lrail .shell{grid-template-columns:var(--lrail,280px) 7px 1fr 7px var(--rail,340px)}
-body.shell.lrail .leftrail{grid-column:1;grid-row:2}
-body.shell.lrail .gripL{grid-column:2;grid-row:2}
-body.shell.lrail .pane{grid-column:3;grid-row:2}
-body.shell.lrail .grip{grid-column:4;grid-row:2}
-body.shell.lrail .rail{grid-column:5;grid-row:2}
-/* Same scroll contract as the right rail, and the same reason for `min-height:0`. */
-body.shell.lrail .leftrail{min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;
-  padding:0 2px 20px;scrollbar-width:thin}
-/* Outside three-column mode the left rail is an empty div and its grip is nothing at all --
-   the card it would have held is back in the right rail, where the markup puts it. */
-.leftrail{display:none}
-body.shell.lrail .leftrail{display:block}
-body.shell .gripL{display:none}
-body.shell.lrail .gripL{display:block}
-/* The header spans both columns and stops being a page heading: in an application it is a
-   title bar, so it gives up its vertical space rather than its identity. */
-body.shell header{grid-column:1/-1;margin:0;padding:0 0 2px}
-body.shell h1{font-size:15px}
-/* `min-height:0` on BOTH panes, and it is not optional: a grid item's default `min-height`
-   is `auto`, which is "as tall as my content", so a rail full of cards would push the row
-   past the viewport and take the canvas with it -- the page would scroll again and the
-   whole change would have bought nothing. */
-body.shell .pane{min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden}
-body.shell .rail{min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;
-  padding:0 2px 20px;scrollbar-width:thin}
-/* THE CANVAS TAKES WHAT IS LEFT. `flex:1` with `min-height:0` for the reason above, and
-   `min-height` dropped from its stacked value of 280px -- a floor written for a page that
-   could grow downwards becomes an overflow in a pane that cannot. */
-body.shell .stage{flex:1;min-height:0;position:static;box-shadow:none;margin:0}
-/* Everything else in the pane keeps its own height and gives the rest to the picture. */
-body.shell .toolbar,body.shell .tstrip,body.shell .looks,body.shell #stats{flex:none}
-body.shell .toolbar{margin:8px 0 6px}
-body.shell .toolbar.minor{margin:0 0 6px}
-body.shell .looks{margin:8px 0 0}
-/* The strips can be tall -- the layers one carries a list -- so they are allowed to scroll
-   inside themselves rather than squeezing the picture to nothing. */
-body.shell .tstrip{max-height:20vh;overflow-y:auto}
-/* One column in a 340px rail comes free from the existing auto-fit, and two come free if
-   the grip is dragged wide enough to hold them. Only the gap needs saying. */
-body.shell .rail .cards{gap:10px}
-body.shell .adv{margin-top:10px}
-/* A footer is part of the site's contract, so it is kept and made a strip rather than
-   dropped: outside `.shell` in the DOM, and outside the scroll of either pane. */
-body.shell footer{flex:none;padding:5px 14px 7px;font-size:10.5px;
-  border-top:1px solid var(--line)}
-
-/* The grab handle. Invisible until it is wanted: a 7px column that reads as a seam, and
-   picks up the accent while it is being used. `touch-action:none` because a pointer drag
-   on a narrow target is otherwise claimed by the browser's own scroll gesture. */
-.grip{display:none}
-body.shell .grip{display:block;cursor:col-resize;touch-action:none;
-  background:linear-gradient(to right,transparent 3px,var(--line) 3px,var(--line) 4px,
-                             transparent 4px)}
-body.shell .grip:hover,body.shell .grip.on{
-  background:linear-gradient(to right,transparent 2px,var(--accent) 2px,var(--accent) 5px,
-                             transparent 5px)}
+/* App layout and inspector styling live in atelier.css. */
 
 /* The site's design contract: every transition and animation is switched off here. The ring stops spinning but keeps its
    coloured arc, and the stage label and clock carry the state on their own -- so the
@@ -620,33 +526,150 @@ body.shell .grip:hover,body.shell .grip.on{
   *{transition:none!important}
   .ring{animation:none;border-right-color:var(--accent)}
 }
+
+/* Studio interface: readable controls and a quiet, neutral picture surround. */
+:root{--bg:#efeee9;--surface:#fffefa;--fg:#292c29;--dim:#62675f;
+  --line:#d5d8cf;--accent:#42644e;--warn:#a33c29}
+body{font:14px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body:not(.shell){max-width:none;padding:0}
+body:not(.shell) .pane{display:contents}
+body.shell{max-width:none;margin:0;padding:0}
+.shell{padding:20px 20px 0}
+header{align-items:center;gap:16px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+h1,body.shell h1{font:500 25px/1.2 Georgia,serif;letter-spacing:-.035em}
+header .sub{font-size:12px;max-width:390px}
+.brand{display:flex;align-items:center;gap:12px}
+.brand-mark{width:34px;height:34px;border-radius:10px 4px 10px 4px;background:var(--accent);
+  color:#fff;display:grid;place-items:center;font:italic 25px Georgia,serif}
+.privacy{margin-left:auto;font-size:11px;color:var(--accent);white-space:nowrap}
+.privacy::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:var(--accent);margin-right:7px}
+body.shell .shell{width:100%;padding:14px 18px 0;row-gap:14px}
+body.shell header{padding:0 0 12px}
+.stage{background:#dedfd8;border-color:#cdd0c6;border-radius:12px}
+.wipe{border-radius:4px;box-shadow:0 5px 22px #292c2926}
+.wipe .tag{background:#202720c9;border-radius:4px;padding:7px 9px;text-shadow:none;
+  font-size:10px;letter-spacing:.07em;max-width:42%}
+.wipe .bar::after{width:32px;height:40px;margin:-20px 0 0 -16px;border-radius:20px;
+  content:"\2039  \203a";color:#333;display:grid;place-items:center;font:20px/1 Georgia,serif}
+.wipe .clear{font-size:12px;padding:7px 11px}
+.wipe .fs{width:34px;height:34px}
+button{min-height:34px;padding:6px 11px;font-size:12px;font-weight:500;border-radius:7px}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible,
+#drop:focus-visible,.grip:focus-visible{outline:3px solid var(--accent);outline-offset:3px}
+button:disabled:hover{color:var(--fg);border-color:var(--line);filter:none}
+button.pri{box-shadow:0 2px 3px #233c2215}
+.toolbar{gap:10px 18px}
+.tgrp{gap:6px}
+.tcap{font-size:10px;letter-spacing:.09em}
+.seg button{padding:7px 10px}
+label.tog>span{min-height:32px;display:inline-flex;align-items:center;font-size:12px}
+.toolbar.minor{gap:6px;padding-top:10px}
+.toolbar.minor button{font-size:11px;min-height:30px;padding:4px 8px}
+.toolbar.minor label.tog>span{font-size:11px;min-height:30px}
+#status{flex-basis:100%;font-size:12px;line-height:1.5;padding:3px 0;color:var(--dim)}
+.cards{grid-template-columns:repeat(auto-fit,minmax(min(258px,100%),1fr));gap:12px}
+.card{padding:17px 16px;border-radius:10px;box-shadow:0 2px 4px #292c2904}
+.card h2{font-size:12px;letter-spacing:.07em;border-bottom:1px solid var(--line);padding-bottom:10px}
+.csub{font-size:12px;line-height:1.5}
+.row{margin-bottom:17px}
+.row .name{font-size:13px;font-weight:500;line-height:1.4}
+.row .name code{display:none}
+.row.show-hint .name code{display:block;font-size:10px;font-weight:400}
+.row .val{font-size:12px;background:#edf1eb;padding:2px 6px;border-radius:4px}
+.row .lead,.row .hint{font-size:12px;line-height:1.5;margin-top:5px}
+.row select{min-height:36px;padding:6px 8px;font-size:13px;border-radius:6px}
+.row input[type=range]{min-height:24px;cursor:pointer}
+.adv>summary{min-height:44px;align-items:center}
+.looks .lkcap{font-size:10px;letter-spacing:.08em}
+.lk{width:112px;border-radius:7px}
+.lk canvas{height:65px}
+.lk .lknm{font-size:11px;padding:7px 8px}
+.lk:focus-visible{outline-offset:0;outline:3px solid var(--accent)}
+.looks::after{background:linear-gradient(to right,transparent,var(--bg))}
+.tstrip{padding:12px;font-size:12px}
+.tstrip .opts{flex-wrap:wrap}
+.tstrip .fovhint,.tstrip .fovlabel{font-size:12px}
+.lyr{min-height:36px}
+.lyr .eye,.lyr .del{min-height:28px;width:28px}
+#drop{border-color:#a0ab99;background:#f5f6f0;padding:48px 20px;font-size:13px;line-height:1.8}
+#drop b{font:500 25px/1.5 Georgia,serif}
+#drop.over{background:#e6eddf;border-color:var(--accent)}
+body.shell .rail{scrollbar-color:#bdc5b8 transparent}
+@media(max-width:1099px){
+  .shell{padding:16px 12px 0}
+  header{gap:8px 14px}header .sub{flex-basis:100%;order:3;max-width:none}
+  .stage{top:8px;min-height:200px}
+  .rail{margin-top:18px}
+  .toolbar{padding:10px 0;margin:0;border-bottom:1px solid var(--line)}
+  .toolbar.minor{border-top:0;padding:10px 0}
+  .tgrp{flex-wrap:wrap}
+  button,.seg button{min-height:40px}
+  .row input[type=range]{min-height:32px}
+}
+@media(max-width:480px){
+  h1{font-size:23px}.privacy{font-size:10px}
+  .toolbar>.tgrp{width:100%}.tcap{width:55px}
+  .toolbar>.tgrp:last-child .pri{margin-left:auto}
+  .seg{max-width:100%;flex-wrap:wrap}
+  .tstrip .opts{max-width:100%}
+  .wipe .guide{max-width:90%;top:42px;font-size:11px}
+}
+
 </style>
+<link rel="stylesheet" href="./studio.css">
+<link rel="stylesheet" href="./atelier.css">
 </head>
 <body>
 
 <div class="shell">
-  <header>
-    <h1>Oil paint tuner</h1>
-    <span class="sub">research tool &middot; runs the real <span style="font-family:var(--mono)">oilpaint</span> pipeline in your browser</span>
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true">o</span><div><h1>Oil paint tuner</h1><span class="brand-caption">A digital painting atelier</span></div></div>
+    <div class="document-title"><span class="document-dot" aria-hidden="true"></span><span id="documentName">Untitled study</span></div>
+    <div class="header-actions">
+      <details id="projectMenu" class="project-menu"><summary>Project <span aria-hidden="true">⌄</span></summary><div class="project-actions">    <button id="setupBtn" title="Copy this painting's parameters and placed swirl centres as JSON &mdash; the record of what is on screen, for reproducing it with scripts/paint.py.">Copy setup</button>
+    <button id="projSave" title="Save everything &mdash; settings, layers, swirl centres and both masks &mdash; as one .oilpaint.json file. The photograph is not included: a project is a recipe, and it records only the picture's name.">Save project</button>
+    <button id="projOpen" title="Open an .oilpaint.json project. You can also just drop one on the page. Anything the file does not mention is left as it is.">Open project</button>
+    <input type="file" id="projFile" accept=".json,application/json,image/*" multiple hidden>
+      <button id="reset" title="Every control back to its default. The photograph stays.">Reset settings</button>
+    <button id="clearTop" disabled title="Forget the picture and start from an empty page.">Remove image</button>
+</div></details>
+      <button id="openImage">Open image</button>
+      <button id="galleryBtn" disabled aria-pressed="false">View painting <span aria-hidden="true">↗</span></button>
+      <button class="pri" id="dl" disabled>Save PNG</button>
+    </div>
+    <button id="galleryExit" class="gallery-exit" hidden><span aria-hidden="true">←</span> Back to editing <kbd>Esc</kbd></button>
   </header>
-
-  <!-- TWO PANES, and in the stacked layout they are two plain divs in the order the page
-       always had. `.pane` is everything about the PICTURE -- the viewer, the toolbar, the
-       tool strips, the looks -- and `.rail` is everything about the PARAMETERS. Wrapping
-       rather than reordering is the point: at narrow widths `.shell` is `display:block`,
-       the wrappers lay out as blocks, and the result is exactly today's page. -->
-  <div class="pane">
+  <nav class="toolrail" aria-label="Picture tools">      <div class="seg" id="toolSeg">
+        <button id="toolNone" class="on" title="Put the tools away and just compare the painting with the photograph. Drag the divider across the picture."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h3m10 0h3"/></svg><span>Compare</span></button>
+        <button id="fovBtn" title="Paint a focus map to guide where the strokes go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span>Focus</span></button>
+        <button id="rgnBtn" title="Divide the picture into layers and paint each one separately. New layer, click the picture to fill it, then move the Palette or Flow rows -- they write to the selected layer, not to the whole picture."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 8 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 18l9 5 9-5"/></svg><span>Layers</span></button>
+        <button id="toolVtx" class="echo" hidden title="The swirl-centre tool is armed. It is switched on from the Flow card, where the field it belongs to is chosen; this turns it off.">Swirl centres</button>
+      </div>
+      <button id="studioBtn" aria-label="Studio light" class="studio-launch" disabled aria-pressed="false" title="Explore the brush relief with a movable studio light">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/></svg>
+        <span>Light</span>
+      </button>
+<span class="toolrail-foot" aria-hidden="true">ATELIER</span></nav>
+  <main class="pane">
+    <div class="canvas-caption"><span class="eyebrow">Your canvas</span><span id="canvasHint">Drag the divider to compare</span></div>
   <div class="stage">
-    <div id="drop">
-      <b>Drop an image here</b>, or click to choose one. You can paste one too.<br>
-      It never leaves this machine &mdash; there is no server, the painting is computed here.
+    <div id="studioView" class="studio-view" hidden>
+      <div class="studio-caption"><span>Light study</span><span>Your painting &middot; real brush relief</span></div>
+      <canvas id="studioCanvas" tabindex="0" aria-label="Studio light preview. Drag to move the light, or use arrow keys." aria-describedby="studioGesture"></canvas>
+      <p id="studioGesture" class="studio-gesture">Drag across the painting to move the light</p>
+    </div>
+    <div id="drop" role="button" tabindex="0" aria-label="Choose an image">
+      <b>Start with a photograph</b><br>Drop an image, click to browse, or paste from your clipboard.<br>
+      Choose a look, then make it your own. Your image stays on this device.
       <input type="file" id="file" accept="image/*" hidden>
     </div>
     <div id="wipe" class="wipe" hidden tabindex="0" role="slider"
          aria-label="Compare source and painting" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50">
       <img id="src" alt="source image">
       <div class="top" id="top"><img id="out" alt="painted result">
-        <canvas id="prog" class="prog" hidden aria-hidden="true"></canvas></div>
+        <canvas id="prog" class="prog" hidden aria-hidden="true"></canvas>
+        <canvas id="lookReveal" class="reveal" hidden aria-hidden="true"></canvas></div>
       <div class="bar" id="bar"></div>
       <canvas id="fovCanvas" class="mask" hidden></canvas>
       <canvas id="vtxCanvas" class="mask vtx" hidden></canvas>
@@ -661,68 +684,6 @@ body.shell .grip:hover,body.shell .grip.on{
         <span class="busy-txt" id="busyTag">rendering</span>
       </div>
     </div>
-  </div>
-
-  <!-- THREE ZONES WITH VISIBLE CAPTIONS, and one shape per class of control.
-
-       The old bar was one flex row of twelve controls separated by a 1px hairline, and the
-       grouping lived in a comment. Two things followed from that, both reported:
-
-         - a toggle and a button looked identical, so `full res` sat in the same visual
-           weight as `Download` and `stats` in the same weight as `Clear`;
-         - the three picture tools are mutually exclusive in the code and nothing said so,
-           so arming one silently released another.
-
-       Now: TOOL is a segmented control (exactly one state, which is the truth), PAINTING
-       and EXPORT are captioned groups, toggles are pills with a dot and actions are
-       rectangles. Everything about the session -- help, stats, Copy setup, Clear and the
-       status line -- drops to a second, quieter row, because none of it is about the
-       picture and two of them destroy work.
-
-       `Render` is still HIDDEN while `auto` is on, which is the default: with every change
-       re-rendering there is nothing for it to do. Turning `auto` off brings it back,
-       because then it is the only way to see a change. `Download` keeps the primary
-       emphasis; it is what the page is for. -->
-  <div class="toolbar">
-    <div class="tgrp" role="group" aria-label="Picture tools">
-      <span class="tcap">Tool</span>
-      <div class="seg" id="toolSeg">
-        <button id="toolNone" class="on" title="Put the tools away and just compare the painting with the photograph. Drag the divider across the picture.">Compare</button>
-        <button id="fovBtn" title="Paint where a viewer's eye should go, and the stroke budget follows it. The content metric answers a different question -- a gravel path outscores a face -- so this puts the eye back in as an input.">Focus map</button>
-        <button id="rgnBtn" title="Divide the picture into layers and paint each one separately. New layer, click the picture to fill it, then move the Palette or Flow rows -- they write to the selected layer, not to the whole picture.">Layers</button>
-        <button id="toolVtx" class="echo" hidden title="The swirl-centre tool is armed. It is switched on from the Flow card, where the field it belongs to is chosen; this turns it off.">Swirl centres</button>
-      </div>
-    </div>
-    <div class="tgrp" role="group" aria-label="Painting">
-      <span class="tcap">Painting</span>
-      <button id="reseed" title="Roll a new random seed: the same painting, arranged differently. The seed itself is a slider in Advanced &rarr; Geometry.">Re-seed</button>
-      <button id="reset" title="Every control back to its default. The photograph stays.">Defaults</button>
-      <label class="tog" title="Re-render on every change. Off is for a full-res picture, where a render is tens of seconds and you want to say when."><input type="checkbox" id="auto" checked><span>auto render</span></label>
-      <button id="render" hidden>Render</button>
-    </div>
-    <div class="tgrp" role="group" aria-label="Export">
-      <span class="tcap">Export</span>
-      <label class="tog" title="Paint at the source's own resolution, which is what Download then writes. Cost scales with area &mdash; tens of seconds on a large photo. Sources longer than 4096px are capped there for memory, and the stats line says so when that happens."><input type="checkbox" id="full"><span>full res <span class="dim">(slow)</span></span></label>
-      <button class="pri" id="dl" disabled>Download</button>
-    </div>
-  </div>
-  <div class="toolbar minor">
-    <label class="tog" title="Show the full explanation under every control. The front cards carry a one-line version whether this is on or not."><input type="checkbox" id="hints"><span>help text</span></label>
-    <label class="tog" title="The numbers behind the last render: stroke count, coverage, psnr, tau. Off by default -- they are for judging a change, not for looking at a picture. WARNINGS show whether this is on or not."><input type="checkbox" id="showStats"><span>stats</span></label>
-    <button id="setupBtn" title="Copy this painting's parameters and placed swirl centres as JSON &mdash; the record of what is on screen, for reproducing it with scripts/paint.py.">Copy setup</button>
-    <!-- THE WHOLE SETUP AS ONE FILE: settings, layers, swirl centres and both masks, in the
-         format oilpaint/project.py owns. `Copy setup` stays -- it is the quick paste into a
-         message, and it is not a file. -->
-    <button id="projSave" title="Save everything &mdash; settings, layers, swirl centres and both masks &mdash; as one .oilpaint.json file. The photograph is not included: a project is a recipe, and it records only the picture's name.">Save project</button>
-    <button id="projOpen" title="Open an .oilpaint.json project. You can also just drop one on the page. Anything the file does not mention is left as it is.">Open project</button>
-    <!-- MULTIPLE, and images too: a bundle is the .json plus the mask PNGs it names, and a
-         browser has no folder to resolve a relative name against -- it gets the files it is
-         handed. Selecting all three (or dropping them together) is what makes the reference
-         form openable here at all. -->
-    <input type="file" id="projFile" accept=".json,application/json,image/*" multiple hidden>
-    <button id="clearTop" disabled title="Forget the picture and start from an empty page.">Clear</button>
-    <span class="spacer"></span>
-    <span id="status">Waiting for an image.</span>
   </div>
 
   <div class="bar-row tstrip" id="vtxBar" hidden>
@@ -828,68 +789,71 @@ body.shell .grip:hover,body.shell .grip.on{
     <button id="rgnUndo" disabled>Undo</button>
     <button id="rgnClear" title="Delete every layer and wipe the mask.">Delete all</button>
   </div>
-  <!-- EIGHT PICTURES INSTEAD OF FORTY IDENTIFIERS. Each is the visitor's own photograph
-       painted in one named look, computed in the background on a second engine (see
-       LOOKS), so the question "what is `nocturne`" is answered by a nocturne rather than
-       by a word in a dropdown. Hidden until there is an image to paint. -->
   <div class="looks" id="looks" hidden>
-    <div class="lkcap">Looks</div>
+    <div class="lkcap">Studies <span>Find a starting point</span></div>
     <div class="lkrow" id="lkRow"></div>
   </div>
   <div id="err"></div>
   <div id="stats" hidden></div>
-  </div><!-- /.pane -->
 
-  <!-- THE LEFT RAIL, and it is Lightroom's shape rather than Photoshop's: a panel, the
-       picture, a panel. `Allocation` is the card that decides how many strokes there are
-       and where they go -- the most structural thing on the page and the one you return to
-       between every look -- so it earns a side of its own rather than a place in the queue
-       above Palette and Flow.
-
-       IT IS THE SAME `#leftCards` NODE IN BOTH LAYOUTS, moved rather than duplicated. A
-       second copy would be a second control surface for the same fields, which is the
-       thing schema.py exists to prevent; and building it into one place or the other at
-       boot would mean a window dragged across the threshold kept a rail that no longer
-       fits. `railsSync` moves the one node, and its home in the markup is the right rail --
-       so stacked, and on any window too narrow for three columns, the page is exactly what
-       it was. -->
-  <div class="leftrail" id="leftRail"></div>
-  <div class="grip gripL" id="railGripL" role="separator" aria-orientation="vertical"
-       aria-label="Resize the allocation panel"></div>
-
-  <!-- The grab handle between the panes. A real element rather than a CSS resizer because
-       the width it sets (`--rail`) has to be readable by sizeWipe: the picture is sized
-       from what is LEFT, so a drag that the layout knew about and the arithmetic did not
-       would leave the viewer the wrong size until the next window resize. -->
-  <div class="grip" id="railGrip" role="separator" aria-orientation="vertical"
-       aria-label="Resize the controls"></div>
-
-  <div class="rail">
-  <!-- THE LAYER LIST IS A PANEL, NOT A STRIP. It lived in the Layers bar above the canvas,
-       where the list, the readout and three lines of prose came to ~170px of the one thing
-       the page is for -- so arming the tool that needs the picture most was what shrank the
-       picture most. That is Photoshop's own split and it is right for the same reason: the
-       tool OPTIONS (fill or brush, erase, size) belong beside the canvas because they
-       describe the next click, and the LAYER LIST belongs in a docked panel because it
-       describes the document. Here the rail already scrolls, so a list of any length now
-       costs the canvas nothing at all.
-
-       It also lands where it should have been: `#rgnEditing` says which layer the Palette
-       and Flow rows write to, and it is now directly above those rows instead of a
-       screenful away from them. -->
-  <section class="card" id="lyrPanel" hidden>
-    <h2>Layers <em id="lyrCount"></em></h2>
-    <span id="rgnEditing"></span>
+    <div class="canvas-status"><span class="privacy">Private &middot; on your device</span>    <span id="status" role="status" aria-live="polite">Waiting for an image.</span></div>
+  </main>
+  <div class="grip" id="railGrip" role="separator" aria-orientation="vertical" aria-label="Resize the inspector" tabindex="0" aria-valuemin="280" aria-valuemax="480" aria-valuenow="340"></div>
+  <aside class="rail" aria-label="Painting controls">
+    <div class="inspector-tabs" role="tablist" aria-label="Painting settings"><button id="tab-color" role="tab" aria-selected="true" aria-controls="panel-color" tabindex="0">Color</button><button id="tab-strokes" role="tab" aria-selected="false" aria-controls="panel-strokes" tabindex="-1">Strokes</button><button id="tab-flow" role="tab" aria-selected="false" aria-controls="panel-flow" tabindex="-1">Flow</button><button id="tab-light" role="tab" aria-selected="false" aria-controls="panel-light" tabindex="-1">Light</button></div>
+    <div class="inspector-scroll">  <details class="card" id="lyrPanel" hidden>
+    <summary><span class="layer-heading">Layers <em id="lyrCount"></em></span><span id="rgnEditing"></span></summary>
     <div id="rgnLayers"></div>
-    <div class="csub" id="rgnHint"></div>
-  </section>
-  <div class="cards" id="leftCards"></div>
-  <div class="cards" id="cards"></div>
-  <details class="adv" id="adv">
-    <summary><span class="advlabel">Advanced settings</span><em id="advCount"></em></summary>
-    <div class="cards" id="advCards"></div>
+    <details class="layer-help"><summary>About layers</summary><div class="csub" id="rgnHint"></div></details>
   </details>
-  </div><!-- /.rail -->
+<section id="panel-color" class="inspector-panel" role="tabpanel" aria-labelledby="tab-color" tabindex="0" >
+      <div class="inspector-intro"><span class="eyebrow">01 / Pigment</span><h2>The palette</h2><p>Mix a little atmosphere.</p></div>
+      <div class="cards" id="cards"></div>
+      <details class="adv" id="adv-color"><summary>Fine adjustments <em id="count-color"></em></summary><div class="cards" id="colorFine"></div></details>
+    </section><section id="panel-strokes" class="inspector-panel" role="tabpanel" aria-labelledby="tab-strokes" tabindex="0" hidden>
+      <div class="inspector-intro"><span class="eyebrow">02 / Mark making</span><h2>The brushwork</h2><p>Give every mark a character.</p></div>
+      <div class="stroke-actions">      <button id="reseed" title="Roll a new random seed: the same painting, arranged differently. The seed is in Strokes &rarr; Fine adjustments.">Vary strokes</button>
+</div><div class="cards" id="leftCards"></div>
+      <details class="adv" id="adv-strokes"><summary>Fine adjustments <em id="count-strokes"></em></summary><div class="cards" id="strokeFine"></div></details>
+    </section><section id="panel-flow" class="inspector-panel" role="tabpanel" aria-labelledby="tab-flow" tabindex="0" hidden>
+      <div class="inspector-intro"><span class="eyebrow">03 / Direction</span><h2>The movement</h2><p>Find the rhythm of your painting.</p></div>
+      <div class="cards" id="flowCards"></div>
+      <details class="adv" id="adv-flow"><summary>Fine adjustments <em id="count-flow"></em></summary><div class="cards" id="flowFine"></div></details>
+    </section><section id="panel-light" class="inspector-panel" role="tabpanel" aria-labelledby="tab-light" tabindex="0" hidden>
+      <div class="inspector-intro"><span class="eyebrow">04 / Depth</span><h2>The surface</h2><p>Let the light find the paint.</p></div>
+      <div class="light-invitation" id="lightInvitation"><span class="eyebrow">An interactive light study</span><p>Move the light across your painting and watch the brushwork catch it.</p><button id="inspectorStudio" disabled>Explore studio light <span aria-hidden="true">&nearr;</span></button></div>
+        <div id="studioNote" role="status" hidden></div><button id="studioEnable" hidden>Enable paint texture</button>  <section id="studioBar" class="studio-bar" aria-label="Studio lighting" hidden>
+    <div class="studio-topline">
+      <h2>Find your light</h2>
+      <div class="studio-presets" role="group" aria-label="Lighting presets">
+        <button id="lightDay" aria-pressed="false">Daylight</button>
+        <button id="lightRake" aria-pressed="false">Raking light</button>
+        <button id="lightTop" aria-pressed="false">Overhead</button>
+      </div>
+    </div>
+    <div class="studio-dials">
+      <div><label for="studioAz">Direction <output id="studioAzV">135&deg;</output></label>
+        <input id="studioAz" type="range" min="0" max="360" step="1" value="135"></div>
+      <div><label for="studioEl">Height <output id="studioElV">35&deg;</output></label>
+        <input id="studioEl" type="range" min="5" max="85" step="1" value="35"></div>
+    </div>
+    <div class="studio-actions">
+      <p>Preview lighting. Apply to keep it in your painting and PNG.</p>
+      <div class="studio-buttons"><button id="studioClose">Cancel</button><button id="studioApply" class="pri">Apply lighting</button></div>
+    </div>
+  </section>
+<div class="cards" id="lightCards"></div>
+      <details class="adv" id="adv-light"><summary>Fine adjustments <em id="count-light"></em></summary><div class="cards" id="lightFine"></div></details>
+    </section>
+      <details class="workspace-options"><summary>Workspace options</summary><div>    <label class="tog" title="Show the full explanation under every control. The front cards carry a one-line version whether this is on or not."><input type="checkbox" id="hints"><span>Control help</span></label>
+    <label class="tog" title="The numbers behind the last render: stroke count, coverage, psnr, tau. Off by default -- they are for judging a change, not for looking at a picture. WARNINGS show whether this is on or not."><input type="checkbox" id="showStats"><span>Render stats</span></label>
+</div></details>
+    </div>
+    <div class="render-controls">      <label class="tog" title="Re-render on every change. Off is for a full-res picture, where a render is tens of seconds and you want to say when."><input type="checkbox" id="auto" checked><span>Auto render</span></label>
+      <button id="render" hidden>Render</button>
+      <label class="tog" title="Paint at the source's own resolution, which is what Download then writes. Cost scales with area &mdash; tens of seconds on a large photo. Sources longer than 4096px are capped there for memory, and the stats line says so when that happens."><input type="checkbox" id="full"><span>High resolution</span></label>
+</div>
+  </aside>
 </div>
 
 <!-- THE WAY BACK TO THE CODE. This page is the whole tool, so a visitor who wants to know
@@ -905,10 +869,16 @@ body.shell .grip:hover,body.shell .grip.on{
 import { saveSetup, loadSetup, saveImage, loadImage,
          saveRegionMask, loadRegionMask } from './session.js';
 
+import { createStudio, createBrushReveal } from './studio.js';
+
 const $ = s => document.querySelector(s);
 let SCHEMA = [], DEFAULTS = {}, params = {}, haveImage = false, lastPng = null;
 // Set by boot() before anything can read it; see there for what it means.
 let freshVisit = false;
+let studioActive = false, studioLoading = false, studioGeneration = 0, studioGPU = null;
+let studioLast = null, studioDraft = null;
+let lookRevealPending = false, lookRevealSource = null;
+const brushReveal = createBrushReveal($('#lookReveal'));
 // The one-line note under each card heading, from the engine. Empty against an engine
 // older than they are, which degrades to the bare headings the page always had.
 let GROUP_NOTES = {};
@@ -1119,18 +1089,96 @@ function renderWidth(){
 // newcomer should meet first is a property of this page, and schema.py is the shared
 // control surface both front ends read. Adding a rank there would put a presentation
 // decision in the one file whose job is to stop the panel existing twice.
-// Three cards, and 'Palette' is the second on purpose: it is the only group whose top
-// control changes the whole picture in one click, so burying it in Advanced next to
-// `flat_theta_deg` would hide the feature from everyone who does not already know it is
-// there. Every other group stays folded.
+// Each inspector starts with its main choices and keeps the detailed trims folded.
 const FRONT_GROUPS = ['Allocation', 'Palette', 'Flow'];
-// ...and which of them gets the other side of the picture. `Allocation` decides how many
-// strokes there are and where they go, which is the most structural choice on the page and
-// the one you come back to between every look -- so on a window wide enough for three
-// columns it is given a rail rather than a place in the queue above Palette and Flow.
-// A name that goes stale here degrades to "the card stays in the right rail", which is the
-// layout the page had, rather than to a card that vanishes.
-const LEFT_GROUPS = ['Allocation'];
+const INSPECTOR = {
+  color: {main: 'cards', fine: 'colorFine'},
+  strokes: {main: 'leftCards', fine: 'strokeFine'},
+  flow: {main: 'flowCards', fine: 'flowFine'},
+  light: {main: 'lightCards', fine: 'lightFine'},
+};
+const GROUP_TAB = {Palette:'color', Allocation:'strokes', Geometry:'strokes',
+  Irregularity:'strokes', Paint:'strokes', Flow:'flow', Impasto:'light'};
+let inspectorTab = 'color', galleryActive = false, galleryReturn = null;
+const inspectorScroll = {};
+
+function selectInspector(name, focus = false){
+  if(!INSPECTOR[name]) return;
+  if(name !== 'light') closeStudio();
+  const scroller = $('.inspector-scroll'), changed = name !== inspectorTab;
+  if(changed) inspectorScroll[inspectorTab] = scroller.scrollTop || 0;
+  inspectorTab = name;
+  for(const key of Object.keys(INSPECTOR)){
+    const tab = $('#tab-' + key), selected = key === name;
+    tab.setAttribute('aria-selected', String(selected)); tab.tabIndex = selected ? 0 : -1;
+    $('#panel-' + key).hidden = !selected;
+  }
+  if(changed) scroller.scrollTop = inspectorScroll[name] || 0;
+  if(focus) $('#tab-' + name).focus();
+}
+for(const name of Object.keys(INSPECTOR)){
+  const tab = $('#tab-' + name);
+  tab.addEventListener('click', () => selectInspector(name));
+  tab.addEventListener('keydown', e => {
+    const keys = Object.keys(INSPECTOR), i = keys.indexOf(name);
+    let next;
+    if(e.key === 'ArrowRight') next = keys[(i + 1) % keys.length];
+    if(e.key === 'ArrowLeft') next = keys[(i + keys.length - 1) % keys.length];
+    if(e.key === 'Home') next = keys[0];
+    if(e.key === 'End') next = keys[keys.length - 1];
+    if(next){ e.preventDefault(); selectInspector(next, true); }
+  });
+}
+
+// Gallery presents the existing render. No settings change and no new render is needed.
+function galleryMode(on){
+  if(on === galleryActive) return;
+  if(on && (!lastPng || studioActive || studioLoading)) return;
+  if(on){
+    galleryReturn = {tab: inspectorTab, fov: !$('#fovBar').hidden,
+      rgn: !$('#rgnBar').hidden, vtx: !$('#vtxBar').hidden,
+      x: window.scrollX, y: window.scrollY, inspectorY: $('.inspector-scroll').scrollTop};
+    fovMode(false); rgnMode(false, true); vtxMode(false); brushReveal.cancel();
+  }
+  galleryActive = on;
+  document.body.classList.toggle('gallery', on);
+  $('#galleryExit').hidden = !on;
+  $('#galleryBtn').setAttribute('aria-pressed', String(on));
+  $('#wipe').setAttribute('role', on ? 'img' : 'slider');
+  $('#wipe').setAttribute('aria-label', on ? 'Your oil painting' : 'Compare source and painting');
+  for(const attr of ['aria-valuemin','aria-valuemax','aria-valuenow']){
+    if(on) $('#wipe').removeAttribute(attr);
+  }
+  if(!on){
+    $('#wipe').setAttribute('aria-valuemin', '0'); $('#wipe').setAttribute('aria-valuemax', '100');
+    const at = parseFloat($('#bar').style.left);
+    $('#wipe').setAttribute('aria-valuenow', String(Math.round(Number.isFinite(at) ? at : 50)));
+  }
+  $('#wipe').tabIndex = on ? -1 : 0;
+  if(!on && galleryReturn){
+    if(galleryReturn.fov) fovMode(true);
+    if(galleryReturn.rgn) rgnMode(true, true);
+    if(galleryReturn.vtx) vtxMode(true);
+    selectInspector(galleryReturn.tab);
+    $('.inspector-scroll').scrollTop = galleryReturn.inspectorY;
+    window.scrollTo(galleryReturn.x, galleryReturn.y);
+  }
+  sizeWipe();
+  (on ? $('#galleryExit') : $('#galleryBtn')).focus({preventScroll:true});
+}
+$('#galleryBtn').addEventListener('click', () => galleryMode(true));
+$('#galleryExit').addEventListener('click', () => galleryMode(false));
+window.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && galleryActive){ e.preventDefault(); galleryMode(false); }
+  if(e.key === 'Escape' && $('#projectMenu').open){ $('#projectMenu').open = false; $('#projectMenu').querySelector('summary').focus(); }
+});
+$('#openImage').addEventListener('click', () => { $('#file').value = ''; $('#file').click(); });
+$('#projectMenu').addEventListener('click', e => {
+  if(e.target.tagName === 'BUTTON') $('#projectMenu').open = false;
+});
+document.addEventListener('pointerdown', e => {
+  if(!$('#projectMenu').contains(e.target)) $('#projectMenu').open = false;
+});
 
 // Picture tools that belong to ONE control rather than to the toolbar. The swirl centres
 // are a property of the flow field, so the button sits under the `flow` row: where you are
@@ -1293,8 +1341,9 @@ async function boot(restore = true){
   // captured region grades the picture whatever the panel says.
   regionLayers = rgnAdopt(saved && saved.regions);
   regionSel = [0];
-  const host = $('#cards'), adv = $('#advCards'), left = $('#leftCards');
-  host.innerHTML = ''; adv.innerHTML = ''; left.innerHTML = '';
+  for(const {main, fine} of Object.values(INSPECTOR)){
+    $('#' + main).innerHTML = ''; $('#' + fine).innerHTML = '';
+  }
   const groups = [];
   for(const c of SCHEMA){
     if(HIDDEN.includes(c.name)) continue;        // no control at all, see above
@@ -1325,28 +1374,20 @@ async function boot(restore = true){
     });
     return card;
   };
-  // The group names come from oilpaint/schema.py, so FRONT_GROUPS holds strings that could
-  // go stale there without anything here noticing. Falling back to the first group means a
-  // rename degrades to "some card is open" rather than to a page where every control is
-  // hidden and the front row is empty.
-  let front = FRONT_GROUPS.map(n => groups.find(g => g.name === n)).filter(Boolean);
-  if(!front.length) front = groups.slice(0, 1);
-  // Built into `#leftCards` or `#cards` by NAME, and then `railsSync` decides where that
-  // container hangs. Splitting it this way is what keeps "which card is on the left" a
-  // one-line list rather than a thing the layout code has to know about cards at all.
-  front.forEach(g => (LEFT_GROUPS.includes(g.name) ? left : host)
-    .appendChild(mkCard(g.name, g.items, true)));
-
-  let nAdv = 0;
-  // The demoted trims first, so a visitor who opens Advanced looking for the rest of the
-  // Palette card finds it at the top rather than after the geometry.
-  const fine = groups.filter(g => Object.keys(FINE).some(n => g.name === FINE_CARD(n)));
-  for(const g of fine.concat(groups.filter(g => !fine.includes(g)))){
-    if(front.includes(g)) continue;
-    adv.appendChild(mkCard(g.name, g.items, false));
-    nAdv += g.items.length;
+  const counts = Object.fromEntries(Object.keys(INSPECTOR).map(k => [k, 0]));
+  for(const g of groups){
+    const base = g.name.replace(' · fine', '');
+    const tab = GROUP_TAB[base] || 'strokes';
+    const front = FRONT_GROUPS.includes(g.name) || g.name === 'Impasto';
+    const container = INSPECTOR[tab][front ? 'main' : 'fine'];
+    $('#' + container).appendChild(mkCard(g.name, g.items, front));
+    if(!front) counts[tab] += g.items.length;
   }
-  $('#advCount').textContent = nAdv;
+  for(const key of Object.keys(INSPECTOR)){
+    $('#count-' + key).textContent = counts[key];
+    $('#adv-' + key).hidden = counts[key] === 0;
+  }
+  selectInspector(inspectorTab);
   applyHints();
   // After the cards, because `looksMark` reads `params` and the strip's selected state has
   // to agree with the rows the panel has just drawn.
@@ -1461,6 +1502,7 @@ function control(c, front){
       if(c.name === 'foveal_strength') fovSyncStrength();
     });
   }
+  row.querySelector('label').setAttribute('for', 'ctl-' + c.name);
   return row;
 }
 
@@ -1543,6 +1585,12 @@ function schedule(){
 async function render(opts){
   opts = opts || {};
   if(!haveImage) return;
+  closeStudio();
+  brushReveal.cancel();
+  $('#studioBtn').disabled = true; $('#inspectorStudio').disabled = true;
+  $('#studioNote').hidden = true;
+  $('#studioEnable').hidden = true;
+  $('#dl').disabled = true;
   // A change SUPERSEDES whatever is running; it does not wait behind it. This used to set
   // `queued` and return, so moving a slider meant sitting through a render of the settings
   // you had already abandoned -- seconds of compute for a picture nobody was going to look
@@ -1571,8 +1619,9 @@ async function render(opts){
     // that did not follow would describe the wrong picture.
     const mb = maskBytes(px.width, px.height);
     const rb = regionBytes(px.width, px.height);
-    const msg = {type: 'render', rgba: px.data.buffer,
-                 w: px.width, h: px.height, params, imgKey};
+    const renderedParams = { ...params };
+    const msg = {type: opts.relight ? 'relight' : 'render', rgba: px.data.buffer,
+                 w: px.width, h: px.height, params: renderedParams, imgKey};
     // The pixel buffer is TRANSFERRED, not copied -- it is single-use and up to ~7 MB.
     const move = [px.data.buffer];
     // Plain fractions on the message -- no key and no transfer. There are at most 32 of
@@ -1605,13 +1654,23 @@ async function render(opts){
     $('#err').textContent = '';
     const img = $('#out');
     img.src = lastPng = toDataURL(j);
+    studioLast = { id: j.id, params: renderedParams, w: j.w, h: j.h };
+    if(!draft){ $('#studioBtn').disabled = false; $('#inspectorStudio').disabled = false; }
+    $('#galleryBtn').disabled = false;
     // Hold the in-progress canvas up until that PNG has actually DECODED. Hiding it the
     // moment `src` is assigned uncovers whatever the <img> was showing before -- the
     // previous painting, or the source on the first render -- for as long as the decode
     // takes, which is a flash back to the old result at the end of every render.
     handedOff = true;
     (img.decode ? img.decode() : Promise.resolve()).catch(() => {}).then(() => {
-      if(mine === token) hidePreview();
+      if(mine === token){
+        hidePreview();
+        if(lookRevealPending){
+          lookRevealPending = false;
+          brushReveal.play(lookRevealSource, lastPng);
+          lookRevealSource = null;
+        }
+      }
     });
     showStats(j.stats, draft);
     // What the mask actually CAUGHT, reported rather than assumed: a mask that catches
@@ -1855,7 +1914,7 @@ function showStats(s, draft){
   el.addEventListener('pointerup', e => el.releasePointerCapture(e.pointerId));
   // Keyboard: the divider is a real control, so it has to be reachable without a pointer.
   el.addEventListener('keydown', e => {
-    if(split()) return;
+    if(split() || e.target !== el) return;
     const step = e.shiftKey ? 10 : 2;
     if(e.key === 'ArrowLeft'){ p = Math.max(0, p - step); }
     else if(e.key === 'ArrowRight'){ p = Math.min(100, p + step); }
@@ -1990,45 +2049,14 @@ const paneScale = () => $('#wipe').classList.contains('split') ? 2 : 1;
 // once in CSS and once here is a breakpoint that will disagree with itself at exactly one
 // window size, which is the width nobody tests at. So there is no media query for the
 // shell: this tests it, `shellSync` stamps `body.shell`, and every rule keys on the stamp.
-const SHELL_Q = '(min-width:1100px) and (min-height:640px)';
-// THE THREE-COLUMN THRESHOLD, and it is a separate number because it is a separate
-// question. The shell asks "is there room to dock a panel"; this asks "is there room to
-// dock TWO and still have a picture between them". 1360 is that sum written out: 280 for
-// the left rail, 340 for the right, 14 of padding either side and two 7px grips leaves
-// ~698 for the canvas, which is about what the whole pane gets on a 1100px window today.
-// Below it the Allocation card simply stays in the right rail, which is the layout that
-// was already there -- so this can only ever add a column, never take a card away.
-const LSHELL_Q = '(min-width:1360px) and (min-height:640px)';
-// Guarded because the DOM shim in index_node.mjs is a shim: a page that threw here would
-// take the whole harness down, and a page that cannot ask degrades to the stacked layout,
-// which is the one that works everywhere.
+const SHELL_Q = '(min-width:1000px) and (min-height:640px)';
 const mq = q => {
   try{ return !!(window.matchMedia && window.matchMedia(q).matches); }
   catch(e){ return false; }
 };
 const shellMode = () => mq(SHELL_Q);
-// Two rails need the shell as well as the width: the left rail is a grid column, and there
-// is no grid to put it in until the shell is on.
-const leftRailMode = () => shellMode() && mq(LSHELL_Q);
-
-/** Move the Allocation container to whichever side the window can afford, and stamp the
- *  layout. One node, moved -- never copied, and never rebuilt: the cards inside it carry
- *  live listeners and a rebuild here would silently detach every one of them. */
-function railsSync(){
-  const box = $('#leftCards'), left = $('#leftRail'), rail = $('.rail'), cards = $('#cards');
-  if(!box || !left || !rail || !cards) return;
-  const want = leftRailMode() ? left : rail;
-  if(box.parentNode === want) return;
-  // Into the right rail it goes back ABOVE the other cards, which is where Allocation sits
-  // in FRONT_GROUPS -- so a window narrowed past the threshold gives back exactly the
-  // one-rail page rather than a reshuffled one.
-  if(want === rail) rail.insertBefore(box, cards); else left.appendChild(box);
-}
-
 function shellSync(){
   document.body.classList.toggle('shell', shellMode());
-  document.body.classList.toggle('lrail', leftRailMode());
-  railsSync();
   sizeWipe();
 }
 
@@ -2038,19 +2066,12 @@ function sizeWipe(){
   const el = $('#wipe');
   if(el.hidden) return;
   const stage = $('.stage');
-  const avail = (stage.clientWidth || 0) - 28;
-  // THE BOUND COMES FROM A DIFFERENT PLACE IN EACH LAYOUT, and that is the whole change.
-  // Stacked, the stage grows with its content and so cannot bound anything -- the viewport
-  // does, at the 62vh that leaves room to scroll to the cards. In the shell the stage is a
-  // flex child with a real height already decided for it, so its OWN box is the bound and
-  // the picture simply fills what the rail and the strips left. That is what turns 420px of
-  // empty surface into picture.
-  //
-  // There is no feedback loop in reading it: `.stage` is `flex:1;min-height:0`, so its size
-  // is the leftover of the pane and does not depend on the child this function resizes.
-  const maxH = shellMode()
-    ? Math.max(160, (stage.clientHeight || 0) - 28)
-    : Math.max(240, window.innerHeight * 0.62);
+  const avail = Math.max(1, (stage.clientWidth || 0) - (galleryActive ? 72 : 48));
+  // Docked and gallery stages have a bounded height. On mobile the image sizes the
+  // stage, so use a viewport cap to leave room for the controls underneath.
+  const maxH = shellMode() || galleryActive
+    ? Math.max(40, (stage.clientHeight || 0) - (galleryActive ? 72 : 48))
+    : Math.max(160, window.innerHeight * 0.42);
   // The height bound is on a PANE, not on the box: two panes side by side may be twice as
   // wide before either of them is too tall. Without the factor the split view would show
   // two half-size pictures in a box sized for one full-size one.
@@ -2067,18 +2088,8 @@ try{
   if(mq && mq.addEventListener) mq.addEventListener('change', shellSync);
 }catch(e){}
 
-// A rail's width, dragged. Parameterised over the two of them rather than written twice:
-// the only thing that differs is WHICH WAY widens, and a copy would be the place the two
-// clamps quietly drift apart.
-//
-// The width is a CSS custom property and not an inline width, so the grid owns the layout
-// and this owns one number -- and so `sizeWipe` can read back what the picture was actually
-// left with after each move.
-const RAIL_MIN = 260, RAIL_MAX = 640;
-// The left rail holds one card and can afford to be narrower than the right, which holds
-// three plus Advanced. 210 is a little under the 258 a card asks for, so it can be pushed
-// tighter than comfortable when the picture matters more -- which is the point of a grip.
-const LRAIL_MIN = 210, LRAIL_MAX = 520;
+// Pointer and keyboard resizing share the inspector width used by the canvas layout.
+const RAIL_MIN = 280, RAIL_MAX = 480;
 function railDrag(gripId, prop, dir, min, max, dflt){
   const grip = $(gripId);
   if(!grip) return;
@@ -2102,7 +2113,16 @@ function railDrag(gripId, prop, dir, min, max, dflt){
     // to the left and the sign flips.
     const w = Math.max(min, Math.min(max, at + dir * (e.clientX - from)));
     document.documentElement.style.setProperty(prop, w + 'px');
+    grip.setAttribute('aria-valuenow', String(w));
     sizeWipe();
+  });
+  grip.addEventListener('keydown', e => {
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key)) return;
+    e.preventDefault();
+    const next = e.key === 'Home' ? min : e.key === 'End' ? max
+      : Math.max(min, Math.min(max, width() + (e.key === 'ArrowLeft' ? 20 : -20)));
+    document.documentElement.style.setProperty(prop, next + 'px');
+    grip.setAttribute('aria-valuenow', String(next)); sizeWipe();
   });
   const end = e => {
     if(!grip.classList.contains('on')) return;
@@ -2112,7 +2132,7 @@ function railDrag(gripId, prop, dir, min, max, dflt){
     // at -- through the same 20% test a window resize uses, and for the same reason: a
     // render is seconds and a drag fires continuously.
     sizeWipe();
-    if(haveImage && lastWidth){
+    if(haveImage && lastWidth && !studioActive && !studioLoading && !galleryActive){
       const w = renderWidth();
       if(Math.abs(w - lastWidth) / lastWidth > 0.2) render();
     }
@@ -2121,7 +2141,6 @@ function railDrag(gripId, prop, dir, min, max, dflt){
   grip.addEventListener('pointercancel', end);
 }
 railDrag('#railGrip', '--rail', -1, RAIL_MIN, RAIL_MAX, 340);
-railDrag('#railGripL', '--lrail', 1, LRAIL_MIN, LRAIL_MAX, 280);
 
 // Opening a tool strip, or the looks strip arriving, changes what is left for the picture
 // -- and neither fires `resize`. Observing the stage catches every one of them without a
@@ -2150,7 +2169,7 @@ window.addEventListener('resize', () => {
   shellSync();
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    if(!haveImage || !lastWidth) return;
+    if(!haveImage || !lastWidth || studioActive || studioLoading || galleryActive) return;
     // Going full screen fires `resize` and multiplies #wipe's clientWidth, which would
     // otherwise trip the 20% test and spend seconds repainting the moment you ask for a
     // closer look -- and again on the way out. The grain card documents the same trap. So
@@ -2425,6 +2444,7 @@ function vtxToggle(fx, fy){
 })();
 
 function vtxMode(on){
+  if(on) selectInspector('flow');
   // The button lives in the Flow card now, which is below the fold, and the thing the tool
   // asks you to do is CLICK THE PICTURE. So opening it brings the picture and the bar back
   // into view -- without that, the tool opens somewhere the visitor cannot see and the only
@@ -2629,6 +2649,8 @@ function showControl(name, value){
     if(strip) paintSwatch(strip, mixed ? MIXED : value);
     return;
   }
+  const chk = row.querySelector('input[type=checkbox]');
+  if(chk){ chk.checked = !mixed && !!value; chk.indeterminate = mixed; return; }
   const inp = row.querySelector('input[type=range]');
   const out = row.querySelector('.val');
   if(inp && !mixed) inp.value = value;
@@ -2751,12 +2773,20 @@ function toolState(){
   // Splitting for one tool and wiping for the other two would teach that rule and then
   // break it, and a vortex is a composition point -- it reads on the photograph at least as
   // well as on the painting, which is what made the original argument only half right.
+  if(fov || rgn || vtx) closeStudio();
   wipeSplit(fov || rgn || vtx);
+  $('#canvasHint').textContent = fov ? 'Paint focus on the source · preview on the right'
+    : rgn ? 'Mark layers on the source · preview on the right'
+    : vtx ? 'Place swirls on the source · preview on the right' : 'Drag the divider to compare';
   $('#fovBtn').classList.toggle('on', fov);
+  $('#fovBtn').setAttribute('aria-pressed', String(fov));
   $('#rgnBtn').classList.toggle('on', rgn);
+  $('#rgnBtn').setAttribute('aria-pressed', String(rgn));
   $('#toolVtx').hidden = !vtx;
   $('#toolVtx').classList.toggle('on', vtx);
   $('#toolNone').classList.toggle('on', !fov && !rgn && !vtx);
+  $('#toolNone').setAttribute('aria-pressed', String(!fov && !rgn && !vtx));
+  $('#toolVtx').setAttribute('aria-pressed', String(vtx));
   guide(fov ? ($('#fovErase').checked
                ? 'Drag on the picture to <b>wipe the map off</b> there.'
                : 'Paint where the eye should go \u2014 <b>darker means more strokes</b> there.')
@@ -2793,7 +2823,7 @@ function fovMode(on){
   // The strip carries `foveal_strength`, so opening it has to show the value the panel
   // holds -- an armed tool whose own slider reads 0 while the picture follows the map at
   // 0.8 is the page contradicting itself.
-  if(on){ fovSyncStrength(); fovMode.opened = true; }
+  if(on){ selectInspector('strokes'); fovSyncStrength(); fovMode.opened = true; }
   toolState();
 }
 
@@ -3542,6 +3572,7 @@ function regionBytes(w, h){
 }
 
 function rgnMode(on, keep){
+  if(on){ selectInspector('color'); $('#lyrPanel').open = true; }
   const c = $('#rgnCanvas');
   $('#rgnBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
   $('#rgnBar').hidden = !on;
@@ -3629,7 +3660,7 @@ $('#rgnErase').addEventListener('change', () => {
 // The segmented control's own two buttons. `Compare` is the OFF state of all four tools --
 // the page with nothing armed, which is what the divider is for -- and the swirl chip only
 // ever turns its tool off; it is armed from the Flow card, where the field lives.
-$('#toolNone').addEventListener('click', () => { fovMode(false); rgnMode(false); vtxMode(false); });
+$('#toolNone').addEventListener('click', () => { closeStudio(); fovMode(false); rgnMode(false); vtxMode(false); });
 $('#toolVtx').addEventListener('click', () => vtxMode(false));
 $('#rgnAdd').addEventListener('click', () => {
   // The lowest free id, so the legend colours are used in order and a mask painted by hand
@@ -3696,7 +3727,12 @@ $('#rgnSave').addEventListener('click', () => {
 
 // ---- upload ------------------------------------------------------------------------
 const drop = $('#drop'), file = $('#file');
-drop.addEventListener('click', () => file.click());
+drop.addEventListener('click', e => { if(e.target !== file) file.click(); });
+drop.addEventListener('keydown', e => {
+  if(e.target === drop && (e.key === 'Enter' || e.key === ' ')){
+    e.preventDefault(); file.click();
+  }
+});
 drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
 drop.addEventListener('dragleave', () => drop.classList.remove('over'));
 drop.addEventListener('drop', e => {
@@ -3717,6 +3753,11 @@ window.addEventListener('paste', e => {
 });
 
 function upload(f, restoring = false, after = null){
+  closeStudio(); brushReveal.cancel();
+  if(galleryActive) galleryMode(false);
+  $('#galleryBtn').disabled = true;
+  studioLast = null; lookRevealPending = false; lookRevealSource = null;
+  $('#studioBtn').disabled = true; $('#inspectorStudio').disabled = true;
   setStatus('reading image...', true);
   const fr = new FileReader();
   fr.onload = async () => {
@@ -3756,6 +3797,7 @@ function upload(f, restoring = false, after = null){
     // The bare name as well as the composed tag: a project records what photograph it was
     // made for, and `source · sunset.jpg + mask` is a caption, not a file name.
     $('#src').dataset.name = f.name || '';
+    $('#documentName').textContent = (f.name || 'Untitled study').replace(/\.[^.]+$/, '');
     tagSource('source · ' + (f.name || 'pasted image'));
     // Seed the top layer with the source too, so the wipe is a valid comparison from the
     // first frame instead of showing a broken image until the first render lands.
@@ -3899,7 +3941,7 @@ undoSync();
 // that appears not to work. preventDefault stops the browser's own undo from also acting on
 // whatever field happens to be focused.
 window.addEventListener('keydown', e => {
-  if(!(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+  if(galleryActive || !(e.ctrlKey || e.metaKey) || e.shiftKey) return;
   if(String(e.key).toLowerCase() !== 'z') return;
   if(!undoStack.length) return;
   e.preventDefault();
@@ -4056,6 +4098,9 @@ function looksMark(){
  *  writing past the selection is what keeps that visible: the rows the look just moved are
  *  then the rows on screen. */
 function applyLook(lk){
+  closeStudio();
+  lookRevealPending = true;
+  lookRevealSource = lastPng;
   if(rgnEditingLayers()) rgnSelect(0, false);
   for(const f of LOOK_FIELDS){
     if(!(f in DEFAULTS)) continue;         // an engine older than this list
@@ -4631,6 +4676,131 @@ async function loadSample(){
   }
 }
 
+// ---- studio lighting ---------------------------------------------------------------
+// The preview is tied to a completed render, not to sliders waiting for manual Render.
+// The explicit Apply action commits the two light parameters to the normal pipeline.
+function studioMessage(text){
+  $('#studioNote').textContent = text;
+  $('#studioNote').hidden = !text;
+}
+function closeStudio(){
+  if(!studioActive && !studioLoading) return;
+  studioGeneration++; studioActive = false; studioLoading = false;
+  if(studioGPU){ studioGPU.dispose(); studioGPU = null; }
+  $('#studioView').hidden = true; $('#studioBar').hidden = true;
+  $('.stage').classList.remove('studio');
+  document.body.classList.remove('studio-open');
+  $('#studioBtn').classList.remove('on');
+  $('#studioBtn').setAttribute('aria-pressed', 'false');
+  $('#studioBtn').disabled = !studioLast;
+  $('#inspectorStudio').disabled = !studioLast;
+  $('#dl').disabled = !lastPng;
+  $('#galleryBtn').disabled = !lastPng;
+  studioMessage('');
+  toolState(); sizeWipe();
+}
+function studioResize(){
+  if(!studioGPU || !studioLast) return;
+  const view = $('#studioView');
+  const availW = Math.max(1, view.clientWidth - 50);
+  const availH = Math.max(1, view.clientHeight - 88);
+  const a = studioLast.w / studioLast.h;
+  const w = Math.min(availW, availH * a), h = w / a;
+  const canvas = $('#studioCanvas');
+  canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+  studioGPU.resize(w, h);
+}
+function studioLight(az, el){
+  studioDraft = { az, el };
+  $('#studioAz').value = az; $('#studioEl').value = el;
+  $('#studioAzV').textContent = az + '\u00b0'; $('#studioElV').textContent = el + '\u00b0';
+  for(const [id, a, e] of [['#lightDay',135,35],['#lightRake',180,15],['#lightTop',90,75]]){
+    const selected = az === a && el === e;
+    $(id).classList.toggle('on', selected); $(id).setAttribute('aria-pressed', String(selected));
+  }
+  if(studioGPU) studioGPU.light(az, el);
+}
+async function openStudio(){
+  selectInspector('light');
+  if(studioActive || studioLoading){ closeStudio(); return; }
+  if(!haveImage || !studioLast) return;
+  // Manual mode may have controls ahead of the visible painting. Resolve that before
+  // editing its lighting, so Apply cannot unexpectedly include a different palette.
+  if(JSON.stringify(params) !== JSON.stringify(studioLast.params)){
+    await render();
+    if(!studioLast || JSON.stringify(params) !== JSON.stringify(studioLast.params)) return;
+  }
+  if(!studioLast.params.impasto){
+    studioMessage('Studio light needs paint texture to catch the light.');
+    $('#studioEnable').hidden = false;
+    return;
+  }
+  fovMode(false); rgnMode(false); vtxMode(false);
+  brushReveal.cancel();
+  studioLoading = true;
+  $('#galleryBtn').disabled = true;
+  const mine = ++studioGeneration, last = studioLast;
+  studioMessage('Preparing the paint surface...');
+  let gpu = null;
+  try{
+    const answer = await ask({ type: 'surface', renderId: last.id });
+    if(mine !== studioGeneration) return;
+    if(!answer.data) throw new Error('Render the painting again, then reopen Studio light.');
+    // Each opening owns its canvas/context. A cancelled asynchronous import or a
+    // disposed WebGL context must never damage a newer studio session.
+    const oldCanvas = $('#studioCanvas'), canvas = oldCanvas.cloneNode(false);
+    oldCanvas.replaceWith(canvas);
+    gpu = await createStudio(canvas, studioLight, () => {
+      closeStudio(); studioMessage('Studio light is unavailable. Your painting is still ready to edit and save.');
+    });
+    if(mine !== studioGeneration){ gpu.dispose(); return; }
+    studioGPU = gpu;
+    gpu.setSurface(answer.data, last.params);
+    studioActive = true; studioLoading = false;
+    $('#studioView').hidden = false; $('#studioBar').hidden = false;
+    $('.stage').classList.add('studio'); document.body.classList.add('studio-open');
+    $('#studioBtn').classList.add('on'); $('#studioBtn').setAttribute('aria-pressed', 'true');
+    $('#toolNone').classList.remove('on'); $('#toolNone').setAttribute('aria-pressed', 'false');
+    $('#dl').disabled = true;
+    studioLight(last.params.light_deg, last.params.light_elev_deg);
+    studioMessage(''); studioResize();
+    $('#studioCanvas').focus({ preventScroll: true });
+  }catch(e){
+    if(mine !== studioGeneration){ if(gpu) gpu.dispose(); return; }
+    closeStudio();
+    studioMessage('Studio light could not open. You can keep editing and saving normally.');
+  }
+}
+$('#studioBtn').addEventListener('click', openStudio);
+$('#inspectorStudio').addEventListener('click', openStudio);
+$('#studioClose').addEventListener('click', () => { closeStudio(); $('#studioBtn').focus(); });
+$('#studioAz').addEventListener('input', e => studioLight(Number(e.target.value), Number($('#studioEl').value)));
+$('#studioEl').addEventListener('input', e => studioLight(Number($('#studioAz').value), Number(e.target.value)));
+$('#lightDay').addEventListener('click', () => studioLight(135,35));
+$('#lightRake').addEventListener('click', () => studioLight(180,15));
+$('#lightTop').addEventListener('click', () => studioLight(90,75));
+$('#studioApply').addEventListener('click', () => {
+  if(!studioDraft) return;
+  const { az, el } = studioDraft;
+  closeStudio();
+  params.light_deg = az; params.light_elev_deg = el;
+  showControl('light_deg', az); showControl('light_elev_deg', el);
+  publishSetup(); render({relight: true});
+  $('#toolNone').focus();
+});
+$('#studioEnable').addEventListener('click', async () => {
+  params.impasto = true; showControl('impasto', true); publishSetup();
+  await render();
+  if(studioLast?.params.impasto) openStudio();
+});
+window.addEventListener('keydown', e => {
+  if(e.key === 'Escape' && (studioActive || studioLoading)){
+    closeStudio(); $('#studioBtn').focus();
+  }
+});
+window.addEventListener('resize', studioResize);
+if(typeof ResizeObserver !== 'undefined') new ResizeObserver(studioResize).observe($('.stage'));
+
 // ---- buttons ------------------------------------------------------------------------
 $('#render').addEventListener('click', render);
 $('#full').addEventListener('change', render);
@@ -4666,6 +4836,13 @@ $('#dl').addEventListener('click', () => {
 // back are a page reload or a paste -- and pasting a COPIED RESULT is one of the ways a
 // painting ends up in the source pane.
 function clearImage(){
+  if(galleryActive) galleryMode(false);
+  $('#documentName').textContent = 'Untitled study';
+  closeStudio(); brushReveal.cancel();
+  $('#galleryBtn').disabled = true;
+  studioLast = null; lookRevealPending = false; lookRevealSource = null;
+  $('#studioBtn').disabled = true; $('#inspectorStudio').disabled = true;
+  $('#studioNote').hidden = true; $('#studioEnable').hidden = true;
   clearTimeout(timer); clearTimeout(refineTimer);
   refinePending = false; token++;      // orphans any answer still in flight...
   worker.postMessage({type: 'cancel'});// ...and this stops the engine actually painting it,
@@ -4689,7 +4866,7 @@ $('#clearTop').addEventListener('click', clearImage);
 // The on-image button sits inside the wipe's drag surface, so its press must not also
 // start a drag of the divider.
 $('#clear').addEventListener('pointerdown', e => e.stopPropagation());
-$('#clear').addEventListener('click', e => { e.stopPropagation(); clearImage(); });
+$('#clear').addEventListener('click', e => { e.stopPropagation(); file.value = ''; file.click(); });
 $('#hints').addEventListener('change', applyHints);
 function applyHints(){
   const on = $('#hints').checked;

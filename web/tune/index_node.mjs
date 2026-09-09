@@ -126,12 +126,7 @@ function makeEl(id) {
     setAttribute() {}, removeAttribute() {}, focus() {}, click() { this.fire('click', {}); },
     setPointerCapture() {}, releasePointerCapture() {}, hasPointerCapture() { return false; },
     scrollIntoView() {},
-    // PARENTAGE IS TRACKED, because the page now MOVES a node rather than only building
-    // one: the Allocation card's container migrates between the two rails as the window
-    // crosses the three-column threshold, and `railsSync` guards on `parentNode` so it
-    // moves once rather than on every resize. `insertBefore` is the other half -- going
-    // back into the right rail it has to land above the other cards, and a shim with only
-    // appendChild made that path throw and took the whole page down with it.
+    // Track parentage as the page builds its controls and layer rows.
     parentNode: null,
     appendChild(c) { this._kids.push(c); c.parentNode = this; return c; },
     insertBefore(c, ref) {
@@ -193,10 +188,7 @@ globalThis.window = {
   // shell is stamped by `shellSync` off these queries, so without them the harness could
   // only ever drive the stacked page -- and the shell is the half with the new arithmetic.
   //
-  // It EVALUATES the query rather than answering a flag, because there are two thresholds
-  // now and they are different numbers: the shell at 1100 and the three-column layout at
-  // 1360. A matchMedia that ignored its argument would make those indistinguishable and
-  // every check about one of them would silently be a check about the other.
+  // Evaluate the query against the viewport so docked and stacked sizing are both driven.
   matchMedia(q) {
     const need = (re, v) => { const m = re.exec(q); return !m || v >= parseFloat(m[1]); };
     const matches = need(/min-width:\s*(\d+)/, globalThis.window.innerWidth)
@@ -456,19 +448,21 @@ const cardList = host => host._kids.map(c => ({
   // "which tools are" are two different questions and one list cannot answer both.
   rows: c._kids.map(r => r.dataset.name).filter(Boolean),
   tools: c._kids.map(r => r._id).filter(x => x && x !== 'created') }));
-// THE FRONT ROW IS BOTH CONTAINERS. `Allocation` is built into `#leftCards` so it can be
-// docked on the other side of the picture, and a census that read only `#cards` would
-// report six schema controls as living on no card at all -- which is exactly what the
-// "every control is on exactly one card" check is for, and exactly the wrong reason for it
-// to fire. Left first, matching FRONT_GROUPS' own order.
-out.frontCards = cardList($('#leftCards')).concat(cardList($('#cards')));
-out.advCards = cardList($('#advCards'));
+// Read every inspector, including its folded adjustments. Hidden tabs still own live
+// controls; switching tabs must never rebuild them or duplicate their values.
+const primaryIds = ['leftCards', 'cards', 'flowCards', 'lightCards'];
+const fineIds = ['colorFine', 'flowFine', 'strokeFine', 'lightFine'];
+out.frontCards = primaryIds.flatMap(id => cardList($('#' + id)));
+out.advCards = fineIds.flatMap(id => cardList($('#' + id)));
+out.inspectorCards = Object.fromEntries([
+  ['color', 'cards', 'colorFine'], ['strokes', 'leftCards', 'strokeFine'],
+  ['flow', 'flowCards', 'flowFine'], ['light', 'lightCards', 'lightFine']
+].map(([name, main, fine]) => [name, cardList($('#' + main)).concat(cardList($('#' + fine))).map(c => c.name)]));
 // THE ROW MARKUP ITSELF. Every row used to be printed as its Python identifier; the label
 // now leads and the identifier follows it, and the second half is the one worth pinning --
 // `target_n` is what scripts/paint.py takes and what `Copy setup` writes, so a redesign
 // that tidied it away would cut the path from the page to the command line.
-const allCards = $('#leftCards')._kids
-  .concat($('#cards')._kids, $('#advCards')._kids);
+const allCards = primaryIds.concat(fineIds).flatMap(id => $('#' + id)._kids);
 out.rowMarkup = {};
 for (const c of allCards) {
   for (const r of c._kids) if (r.dataset.name) out.rowMarkup[r.dataset.name] = r.innerHTML;
@@ -1044,28 +1038,13 @@ $('#toolNone').fire('click', {});
 await settle(200);
 out.lyrOutlivesTool = [lyrShown(), $('#lyrCount').textContent];
 
-// 5f. THE THREE-COLUMN LAYOUT. `Allocation` decides how many strokes there are and where
-// they go, so on a window wide enough it is docked on the far side of the picture --
-// Lightroom's shape, a panel either side. The claim with a bug in it is not that it appears
-// but that it MIGRATES: one node, moved between the two rails as the window crosses 1360,
-// never a second copy (which would be two control surfaces for the same six fields) and
-// never rebuilt (which would detach every listener the cards carry).
-const homeOf = () => (($('#leftCards').parentNode || {})._id) || 'none';
-out.lrailWide = [[...globalThis.document.body.classList._s].includes('lrail'), homeOf()];
-// Narrow the window past the threshold, but not past the shell's -- so this is the middle
-// band, where there is room for one rail and not for two.
-const setW = w => {
-  globalThis.window.innerWidth = w;
-  (globalThis.window._h.resize || []).forEach(f => f());
-};
-setW(1200);
-await settle(120);
-out.lrailNarrow = [[...globalThis.document.body.classList._s].includes('lrail'),
-                   [...globalThis.document.body.classList._s].includes('shell'), homeOf()];
-// ...and back, because a one-way migration would pass every check above.
-setW(1440);
-await settle(120);
-out.lrailBack = [[...globalThis.document.body.classList._s].includes('lrail'), homeOf()];
+// Switching inspector tabs preserves the exact control nodes and keeps one panel active.
+const paletteCard = $('#cards')._kids[0];
+$('#tab-flow').fire('click', {});
+out.inspectorFlow = ['color','strokes','flow','light'].map(k => $('#panel-' + k).hidden);
+$('#tab-flow').fire('keydown', {key:'Home'});
+out.inspectorHome = ['color','strokes','flow','light'].map(k => $('#panel-' + k).hidden);
+out.inspectorStable = paletteCard === $('#cards')._kids[0];
 
 // 5g. THE PROJECT FILE. The format belongs to oilpaint/project.py, and the whole value of
 // that is that a file saved here is a file `scripts/paint.py --project` takes. So the page's

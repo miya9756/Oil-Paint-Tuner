@@ -22,6 +22,7 @@ import { edgeAlignment, psnr } from './oilpaint/metrics.js';
 import { PIGMENTS } from './oilpaint/palette.js';
 import { LEGEND as REGION_LEGEND, MAX_REGIONS, REGION_PARAMS } from './oilpaint/regions.js';
 import { FLOW_KINDS, MAX_VORTICES } from './oilpaint/flow.js';
+import { studioSurface } from './oilpaint/studio-surface.js';
 
 let schema = null;
 
@@ -274,6 +275,8 @@ function relightKey(job) {
 /** A frame from the cached buffers. Only the lighting is recomputed. */
 function relightFrom(job, t0) {
   const c = relit;
+  c.id = job.id;
+  c.params = { ...job.params };
   const info = Object.assign({}, c.info);
   const painting = finish(c.out, c.cover, c.coverTail, info, job.params, c.height);
   // psnr is the one statistic the lighting really moves, so it is recomputed; everything
@@ -415,7 +418,7 @@ async function paint(job, mine) {
   };
   // Keep the pre-lighting buffers for the relight path. `finish` allocated its own result
   // rather than writing into `out`, so these can be served again as they stand.
-  relit = { key: relightKey(job), out, cover, coverTail, height,
+  relit = { key: relightKey(job), id: job.id, params: { ...params }, out, cover, coverTail, height,
             info: Object.assign({}, info), rgb, w, h, stats };
   return { pixels, w, h, stats };
 }
@@ -464,6 +467,19 @@ async function handleInit(id) {
 
 self.onmessage = async (e) => {
   const msg = e.data;
+  if (msg.type === 'surface') {
+    // A surface belongs to the exact completed painting the visitor is inspecting.
+    // Never hand a newly rendered or superseded image to an older studio request.
+    try {
+      const data = relit && relit.id === msg.renderId
+        ? studioSurface(relit, relit.params) : null;
+      self.postMessage({ id: msg.id, type: 'surface', data },
+                       data ? [data.color, data.surface] : []);
+    } catch (err) {
+      self.postMessage({ id: msg.id, type: 'error', message: String(err.message || err) });
+    }
+    return;
+  }
   if (msg.type === 'init') {
     try {
       await handleInit(msg.id);

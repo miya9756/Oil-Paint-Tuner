@@ -66,8 +66,8 @@ reference sets the mood, the palette sets the tubes.
 
 ## The panel
 
-Seven groups of controls. The ones you will reach for most are on the front cards; the fine
-trims fold away under **Advanced** so the panel stays readable.
+Seven groups of controls live in the **Color**, **Strokes**, **Flow**, and **Light** tabs.
+The main choices come first; each tab folds its detailed trims under **Fine adjustments**.
 
 | group                  | what it changes                                                                                                                                                        |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -79,7 +79,7 @@ trims fold away under **Advanced** so the panel stays readable.
 | **Paint**        | The underpainting, the edge hardness of a mark, and how thickly the paint covers.                                                                                      |
 | **Impasto**      | Thickness and light. The paint is built as a real height field and then lit, so you can rake a light across the picture and watch the ridges catch it.                 |
 
-Turn on the **help** toggle in the toolbar and every control explains itself in place.
+Turn on **Control help** under **Workspace options** and every control explains itself in place.
 
 **Stats** shows the numbers behind the current render — stroke count, coverage — for when
 you want to know *why* a change did what it did. It is off by default, because the page is
@@ -242,9 +242,10 @@ each is one file; see [`examples/`](examples/) for both forms.
 ## Rendering at full size
 
 The preview renders at about 1100 pixels across, so that dragging a slider feels immediate.
-When you have the look you want, turn on **full res** and press **Render**: that paints at
-your photograph's own resolution, which on a phone photo is seconds to a minute of work.
-Then **Download** writes the PNG.
+When you have the look you want, turn on **High resolution** below the inspector. That
+paints at your photograph's own resolution, which on a phone photo is seconds to a minute
+of work. **Save PNG** writes the finished image. If **Auto render** is off, use **Render**
+after adjusting settings.
 
 A big render tells you what it is doing rather than showing a spinner — it names the stage
 it is in, and once it has been going for more than half a second it streams the painting
@@ -254,6 +255,45 @@ making you wait it out.
 
 Your image and your settings are remembered between visits, so closing the tab does not
 lose your work.
+
+## The atelier workspace
+
+The tool rail holds **Compare**, **Focus**, **Layers**, and **Light**. A single inspector
+groups settings into **Color**, **Strokes**, **Flow**, and **Light**, with fine adjustments
+under each tab. Use the arrow keys, Home, or End to navigate the tabs; the divider beside
+the inspector can also be resized with the keyboard. **Project** contains setup import,
+export, and reset actions. Help and render statistics are under **Workspace options**.
+
+**View painting** opens a framed gallery view of the existing render. **Back to editing**
+or Escape restores your inspector, tool, and layer selection. Gallery mode does not change
+the painting settings or export resolution. On smaller screens the tools form a horizontal
+row and the painting stays above the scrollable controls.
+
+## Studio light
+
+Choose **Light** on the tool rail, or **Explore studio light** in the inspector, to explore the relief of your painting. Drag across the canvas to
+move the light, use the direction and height sliders, or try **Daylight**, **Raking light**,
+and **Overhead**. The arrow keys also move the light when the preview has focus.
+
+**Apply lighting** keeps the chosen light in your settings and renders it into the PNG.
+**Cancel** or Escape returns to the painting without changing it. The preview uses the
+actual brush-height data and the same lighting model as the painter; large previews are
+limited to 1400 pixels on their long side. PNG export still uses the normal rendering
+pipeline at the selected resolution.
+
+The Three.js preview loads on demand from the local, pinned files in `web/tune/vendor/`.
+It needs WebGL 2; if that is unavailable, the ordinary painter and its lighting sliders
+remain usable. No image is sent elsewhere. Look changes use a short brush reveal, and
+the interface respects the system's reduced-motion preference.
+
+The optional GPU and interaction checks use Node 22+ and a local Chrome debugging session:
+
+```bash
+node tests/test_studio_browser.mjs http://localhost:9231 http://localhost:8141
+```
+
+The first address is Chrome's debugging endpoint; the second is the running tuner.
+The checks create and dispose an isolated browser context, leaving existing tabs alone.
 
 ## From the command line
 

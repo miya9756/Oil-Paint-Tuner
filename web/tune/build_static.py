@@ -39,7 +39,8 @@ from oilpaint.schema import as_dict  # noqa: E402
 # the package as ES modules for the parity tests, and the browser needs no such hint.
 # One page: the tuner carries the living painting inline (the animator and live pages were
 # folded into it -- see CLAUDE.md), so the whole tool is index.html plus its worker.
-ASSETS = ["index.html", "engine.worker.js", "session.js"]
+ASSETS = ["index.html", "engine.worker.js", "session.js", "studio.js", "studio.css", "atelier.css",
+          "vendor/three.module.min.js", "vendor/three.core.min.js", "vendor/THREE-LICENSE.txt"]
 # Binary assets, kept apart from ASSETS because the import-resolution pass below opens every
 # name in ASSETS as TEXT -- a .jpg in that list is a UnicodeDecodeError, not a broken import.
 # `sample.jpg` is the image the page loads on its own so the tool is usable the moment it
@@ -70,6 +71,7 @@ def build(dist):
         modules.append(name)
 
     for name in ASSETS + MEDIA:
+        os.makedirs(os.path.dirname(os.path.join(dist, name)), exist_ok=True)
         shutil.copy2(os.path.join(HERE, name), os.path.join(dist, name))
     shutil.copy2(SAMPLE_PROJECT, os.path.join(dist, SAMPLE_PROJECT_AS))
 
@@ -105,7 +107,7 @@ def verify(dist, modules):
     for name in ASSETS + [os.path.join(PACKAGE, m) for m in modules]:
         src = open(os.path.join(dist, name)).read()
         base = os.path.dirname(name)
-        for spec in re.findall(r"""from\s+['"](\.[^'"]+)['"]""", src):
+        for spec in re.findall(r"""(?:from\s*|import\s*\(\s*)['"](\.[^'"]+)['"]""", src):
             target = os.path.normpath(os.path.join(base, spec))
             ok = os.path.exists(os.path.join(dist, target))
             check(ok, f"{name} -> {spec} resolves", "" if ok else f"missing {target}")

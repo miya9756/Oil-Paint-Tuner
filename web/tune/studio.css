@@ -1,0 +1,85 @@
+/* The studio's motion belongs to the pigment and the painting. */
+button,select{transition:background-color .16s,color .16s,border-color .16s,box-shadow .16s}
+.brand-mark{position:relative;overflow:hidden;border-radius:48% 38% 45% 24%;
+  box-shadow:inset 1px 2px 1px #ffffff4a,inset -2px -3px 2px #1e392a44}
+.brand-mark::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(112deg,transparent 0 4px,#ffffff0d 5px,transparent 6px)}
+.stage{background-color:#dfe0d9;background-image:
+  repeating-linear-gradient(0deg,transparent 0 3px,#fff2 3px 4px),
+  repeating-linear-gradient(90deg,transparent 0 3px,#414d3506 3px 4px)}
+.swatch{gap:6px;padding:8px 2px 5px;min-height:40px;align-items:center}
+.swatch i{height:23px;position:relative;border:none;border-radius:50% 34% 45% 28%;
+  transform:rotate(-8deg);box-shadow:inset 1px 2px 2px #ffffff70,
+  inset -1px -3px 2px #0003,0 2px 2px #1f2d2020;overflow:hidden}
+.swatch i:nth-child(2n){transform:rotate(9deg);border-radius:32% 51% 30% 46%}
+.swatch i::after{content:"";position:absolute;inset:0;background:
+  linear-gradient(160deg,#ffffff45,transparent 45%),
+  repeating-linear-gradient(104deg,transparent 0 3px,#00000012 4px,transparent 5px,#ffffff24 6px)}
+.swatch em{font-size:11px}
+.lk{transition:box-shadow .18s,border-color .18s}
+.lk:hover{box-shadow:0 3px 9px #26382620}
+.lk.on{box-shadow:0 0 0 1px var(--accent)}
+.lk .lknm{position:relative}
+.lk.on .lknm::after{content:"\2713";float:right;margin-left:10px}
+.wipe .top canvas.reveal{position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;object-fit:cover}
+.wipe:fullscreen .top canvas.reveal{object-fit:contain}
+.studio-launch{display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  background:#f4f1e7;border-color:#c8c5b6;color:#605436;white-space:nowrap}
+.studio-launch svg{width:15px;height:15px;flex:none}
+.studio-launch.on{background:#605436;border-color:#605436;color:#fff}
+/* Keep the wipe's box in the layout; the studio surface has its own gestures. */
+.stage.studio{position:relative;background:#30382f;border-color:#30382f;
+  background-image:radial-gradient(ellipse at 40% 0%,#68735b66,transparent 80%)}
+body.shell .stage.studio{position:relative;top:0}
+.stage.studio #wipe{visibility:hidden;pointer-events:none}
+.studio-view{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;border-radius:11px;padding:44px 24px 38px}
+.studio-view canvas{display:block;max-width:100%;max-height:100%;touch-action:none;
+  cursor:crosshair;outline-offset:5px;border-radius:1px;
+  box-shadow:0 0 0 5px #e7e0cf,0 0 0 6px #a79f8c,0 14px 30px #0006}
+.studio-view canvas:focus-visible{outline:2px solid #e2cca0}
+.studio-caption{position:absolute;top:15px;left:20px;right:20px;display:flex;
+  justify-content:space-between;align-items:center;color:#e6dfcc;font-size:10px;
+  letter-spacing:.13em;text-transform:uppercase;pointer-events:none}
+.studio-caption span:last-child{letter-spacing:.04em;font-size:9px;opacity:.75}
+.studio-gesture{position:absolute;bottom:10px;margin:0;color:#dddccd;
+  font-size:11px;pointer-events:none;text-align:center}
+.studio-bar{flex:none;border:1px solid #cdc9b9;border-radius:10px;background:#f8f6ed;
+  padding:12px 14px;margin:8px 0;box-shadow:0 2px 6px #26382606}
+.studio-topline,.studio-actions{display:flex;align-items:center;justify-content:space-between;
+  gap:8px;flex-wrap:wrap}
+.studio-topline h2{font:500 18px/1.2 Georgia,serif;margin:0;color:#4c523f}
+.studio-presets{display:flex;gap:4px;flex-wrap:wrap}
+.studio-presets button{font-size:11px;min-height:28px;padding:3px 8px;background:transparent}
+.studio-presets button.on{background:#e3e7db;color:#314732;border-color:#9aa88e}
+.studio-dials{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:10px 0 6px}
+.studio-dials label{font-size:11px;display:flex;align-items:center;justify-content:space-between}
+.studio-dials output{font:11px var(--mono);color:#516344}
+.studio-dials input{display:block;width:100%;accent-color:var(--accent);min-height:22px;margin:2px 0}
+.studio-actions p{font-size:11px;color:var(--dim);margin:0;flex:1}
+.studio-actions button{font-size:11px;min-height:30px}
+.studio-actions .studio-buttons{display:flex;gap:5px}
+body.studio-open .looks{display:none}
+body.studio-open .toolbar .tgrp[aria-label="Painting"],
+body.studio-open .toolbar .tgrp[aria-label="Export"]{display:none}
+#studioNote{font-size:12px;color:var(--dim);flex-basis:100%;margin:2px 0}
+@media(max-width:1099px){
+  .stage.studio{position:sticky}
+  .studio-bar{padding:12px;margin:10px 0}
+  .studio-actions button,.studio-presets button{min-height:40px}
+  .studio-dials input{min-height:32px}
+}
+@media(max-width:480px){
+  .studio-view{padding:38px 18px 34px}
+  .studio-caption{left:14px;right:14px;font-size:9px}
+  .studio-gesture{font-size:10px}
+  .studio-dials{gap:12px}
+  .studio-topline{align-items:flex-start}
+  .studio-actions p{flex-basis:100%}
+  .studio-buttons{width:100%;justify-content:flex-end}
+}
+@media(max-height:640px){.stage.studio{position:relative}}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+}

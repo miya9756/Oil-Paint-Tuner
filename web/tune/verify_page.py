@@ -101,6 +101,11 @@ def _png(path, colour=(255, 0, 0)):
 def main():
     src = open(PAGE).read()
     css_raw = re.search(r"<style>(.*?)</style>", src, re.S).group(1)
+    # The optional studio skin ships separately; include it in the same hidden-state,
+    # brace and reduced-motion checks as the inline interface styles.
+    for href in re.findall(r'<link[^>]*rel="stylesheet"[^>]*href="(\.[^"]+)"', src):
+        with open(os.path.join(HERE, href), encoding="utf-8") as sheet:
+            css_raw += "\n" + sheet.read()
     # `<script type="module">` since the compute moved into a worker -- a bare `<script>`
     # pattern silently matches nothing here, and every JS check below would vanish.
     # Strip CSS comments FIRST. Without this the checks match their own rationale: the
@@ -139,7 +144,7 @@ def main():
         check(r.returncode == 0, "inline script parses", r.stderr.strip()[:200])
         # The compute lives out here now, so checking only the inline script would leave
         # the part that actually paints unverified.
-        mods = ["engine.worker.js"] + [
+        mods = ["engine.worker.js", "studio.js"] + [
             os.path.join("oilpaint", f) for f in sorted(os.listdir(os.path.join(HERE, "oilpaint")))
             if f.endswith(".js")]
         for name in mods:
@@ -571,7 +576,7 @@ def page_runtime(node):
     # precisely so sizeWipe can read back what the layout was given.
     check(hot.get("railWider") == "440px",
           "dragging the grip toward the picture widens the rail", str(hot.get("railWider")))
-    check(hot.get("railClamped") == "260px",
+    check(hot.get("railClamped") == "280px",
           "and the rail is clamped, so a drag can never leave the canvas no width",
           str(hot.get("railClamped")))
     check(hot.get("railReleased") is False,
@@ -608,25 +613,18 @@ def page_runtime(node):
           "and putting the tool away does not take the layers with it",
           str(hot.get("lyrOutlivesTool")))
 
-    # THE THREE-COLUMN LAYOUT. `Allocation` is the most structural card on the page -- how
-    # many strokes there are and where they go -- so on a wide enough window it is docked
-    # opposite the other rail. The claim that can break is not that it appears but that it
-    # MIGRATES: one node moved as the window crosses 1360, never copied (two control
-    # surfaces for the same six fields is what schema.py exists to prevent) and never
-    # rebuilt (which would detach every listener its rows carry).
-    check(hot.get("lrailWide") == [True, "leftRail"],
-          "a wide window docks Allocation on the far side of the picture",
-          str(hot.get("lrailWide")))
-    # The middle band: room for one rail and not for two. The shell must stay on and the
-    # card must go home ABOVE the others, which is where Allocation sits in FRONT_GROUPS.
-    # ".rail" and not "rail": the shim mints its stubs from the selector and only strips a
-    # leading "#", so a class-selected element keeps its dot as an id.
-    check(hot.get("lrailNarrow") == [False, True, ".rail"],
-          "and a window with room for one rail keeps the shell and gives the card back",
-          str(hot.get("lrailNarrow")))
-    check(hot.get("lrailBack") == [True, "leftRail"],
-          "...and it goes back out again, so the migration is not one-way",
-          str(hot.get("lrailBack")))
+    check(hot.get("inspectorFlow") == [True, True, False, True],
+          "the Flow tab exposes only its own panel", str(hot.get("inspectorFlow")))
+    check(hot.get("inspectorHome") == [False, True, True, True],
+          "Home returns keyboard navigation to Color", str(hot.get("inspectorHome")))
+    check(hot.get("inspectorStable") is True,
+          "switching tabs preserves live control nodes")
+    check(hot.get("inspectorCards") == {
+        "color": ["Palette", "Palette · fine"],
+        "strokes": ["Allocation", "Geometry", "Irregularity", "Paint"],
+        "flow": ["Flow", "Flow · fine"], "light": ["Impasto"]},
+          "each inspector owns its related settings and fine adjustments",
+          str(hot.get("inspectorCards")))
 
     # THE PROJECT FILE, AND THE ONE CHECK THAT COULD NOT BE MADE ON EITHER SIDE ALONE. The
     # format is oilpaint/project.py's, and the whole point of that is that a file saved in
@@ -843,7 +841,7 @@ def page_runtime(node):
     check(all("vtxBtn" not in v for k, v in tools.items() if k != "Flow"),
           "...and only that card does", str(tools))
     check(adv[:2] == ["Palette · fine", "Flow · fine"],
-          "the demoted trims head the Advanced fold under their own card names", str(adv[:3]))
+          "the palette and flow trims remain in their own fine-adjustment folds", str(adv[:3]))
     seen = [n for c in cold["frontCards"] + cold["advCards"] for n in c["rows"]]
     hidden = {"base", "base_cell_scale"}
     expect = sorted(r["name"] for r in base["schema"]["schema"] if r["name"] not in hidden)

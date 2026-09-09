@@ -501,6 +501,19 @@ await onmessage({ data: { id: 6, type: 'render', rgba: rgba.slice().buffer, w: W
                           params: job.cfg_flow, imgKey: 7 } });
 await onmessage({ data: { id: 7, type: 'relight', rgba: rgba.slice().buffer, w: W, h: H,
                           params: litParams, imgKey: 7 } });
+// Studio buffers belong to a completed render id. Asking for an obsolete painting
+// must never reveal the newest painting's surface under an older image.
+await onmessage({ data: { id: 70, type: 'surface', renderId: 7 } });
+await onmessage({ data: { id: 71, type: 'surface', renderId: 6 } });
+const studioData = posted.find(m => m.id === 70)?.data;
+out.studio = {
+  present: !!studioData,
+  size: studioData ? [studioData.w, studioData.h] : null,
+  colors: studioData ? studioData.color.byteLength : 0,
+  normals: studioData ? studioData.surface.byteLength : 0,
+  finite: studioData ? [...new Float32Array(studioData.surface)].every(Number.isFinite) : false,
+  staleRejected: posted.find(m => m.id === 71)?.data === null,
+};
 // And a relight that MISSES -- a different image key, so the cached buffers are for another
 // picture -- must fall through to a full render rather than serving the wrong one.
 await onmessage({ data: { id: 8, type: 'relight', rgba: rgba.slice().buffer, w: W, h: H,

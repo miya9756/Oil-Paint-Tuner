@@ -155,6 +155,13 @@ export function light(rgb, height, cover, h, w, opts = {}) {
   const { depth = 0.35, lightDeg = 135.0, elevDeg = 35.0, gloss = 0.35,
           canvasWeave = 0.0, occlusion = 0.0, viewDeg = 90.0, viewElevDeg = 90.0 } = opts;
 
+  const { fld, occl } = lightingField(height, cover, h, w, canvasWeave, occlusion);
+  return shadeField(rgb, fld, occl, h, w, depth, lightDeg, elevDeg, gloss, viewDeg, viewElevDeg);
+}
+
+/** Shared surface preparation for the canonical CPU render and the studio preview. */
+export function lightingField(height, cover, h, w, canvasWeave = 0, occlusion = 0) {
+
   // The weave is folded into a copy of the height field first, because the central
   // difference below has to see it -- adding it to the shading afterwards would give tooth
   // with no relief. Skipped entirely at 0, which is also the no-allocation path.
@@ -183,6 +190,10 @@ export function light(rgb, height, cover, h, w, opts = {}) {
     }
   }
 
+  return { fld, occl };
+}
+
+function shadeField(rgb, fld, occl, h, w, depth, lightDeg, elevDeg, gloss, viewDeg, viewElevDeg) {
   const [lx, ly, lz] = direction(lightDeg, elevDeg);
   const [vx, vy, vz] = direction(viewDeg, viewElevDeg);
   const shin = 8.0 + 56.0 * gloss, ks = 0.5 * gloss;
