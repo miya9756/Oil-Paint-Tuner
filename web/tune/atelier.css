@@ -53,6 +53,7 @@ button:disabled{cursor:default}
 .wipe{border-radius:0;box-shadow:0 0 0 4px #e6dfce,0 0 0 5px #1115,0 12px 25px #0005}
 .wipe .tag{font-size:9px;letter-spacing:.1em;background:#25292370;border-radius:2px;padding:5px 6px;top:10px}
 .wipe .tag-l{left:10px;max-width:45%}
+.wipe.split .guide{max-width:calc(50% - 16px)}
 .wipe .bar{background:#fbf8eecc;width:1px}
 .wipe .bar::after{width:24px;height:34px;margin:-17px 0 0 -12px;border-radius:12px;
   background:linear-gradient(90deg,#e7e1d8 0 42%,#716758 42% 46%,#faf7f0 46% 54%,#716758 54% 58%,#e7e1d8 58%)}
@@ -81,6 +82,17 @@ button:disabled{cursor:default}
 .inspector-tabs button:hover{color:var(--accent);background:#f0ebe0}
 .inspector-tabs button[aria-selected="true"]{border-bottom-color:var(--accent);color:var(--accent)}
 .inspector-scroll{padding:23px 24px 16px;min-width:0}
+.detail-map-status{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin:0 0 18px;
+  padding:7px 9px;border:1px solid var(--line);border-radius:3px;color:var(--dim);background:#f2ede2}
+.detail-map-status>span{flex:1;font-size:10px;min-width:100px}
+.detail-map-status button{font-size:10px;min-height:28px;padding:3px 6px;background:transparent;
+  border-color:transparent;color:var(--accent)}
+.detail-map-status button:hover{background:#e8decd;border-color:#d9cbb5}
+#fovDone{margin-left:auto;border-color:#b9a181;color:var(--accent)}
+.rail #fovBtn{width:100%;min-height:36px;font-size:12px;border:1px solid #daceb9;
+  border-radius:3px;color:#745238;background:#eee6d9}
+.rail #fovBtn.on{background:#895434;border-color:#895434;color:#fffaf1}
+.studio-open .detail-map-status{display:none}
 .inspector-intro{margin-bottom:24px}
 .inspector-intro h2{font:400 30px/1.2 Georgia,serif;letter-spacing:-.7px;margin:8px 0 7px;text-transform:none;color:#494132}
 .inspector-intro p{font-size:12px;color:var(--dim);margin:0}

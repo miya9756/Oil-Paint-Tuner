@@ -642,7 +642,6 @@ body.shell .rail{scrollbar-color:#bdc5b8 transparent}
   </header>
   <nav class="toolrail" aria-label="Picture tools">      <div class="seg" id="toolSeg">
         <button id="toolNone" class="on" title="Put the tools away and just compare the painting with the photograph. Drag the divider across the picture."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="1"/><path d="M12 4v16M4 12h3m10 0h3"/></svg><span>Compare</span></button>
-        <button id="fovBtn" title="Paint a focus map to guide where the strokes go"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5"/></svg><span>Focus</span></button>
         <button id="rgnBtn" title="Divide the picture into layers and paint each one separately. New layer, click the picture to fill it, then move the Palette or Flow rows -- they write to the selected layer, not to the whole picture."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="m3 8 9-5 9 5-9 5-9-5Zm0 5 9 5 9-5M3 18l9 5 9-5"/></svg><span>Layers</span></button>
         <button id="toolVtx" class="echo" hidden title="The swirl-centre tool is armed. It is switched on from the Flow card, where the field it belongs to is chosen; this turns it off.">Swirl centres</button>
       </div>
@@ -709,7 +708,7 @@ body.shell .rail{scrollbar-color:#bdc5b8 transparent}
   </div>
 
   <div class="bar-row tstrip" id="fovBar" hidden>
-    <span class="tname">Focus map</span>
+    <span class="tname">Detail allocation</span>
     <!-- WHAT THE CLICK DOES comes first in all three strips, because it is the question a
          hand asks before any of the settings matter. -->
     <label class="tog" title="Wipe the map back off. Unmarked areas are the ones the content metric decides on its own."><input type="checkbox" id="fovErase"><span>erase</span></label>
@@ -728,9 +727,9 @@ body.shell .rail{scrollbar-color:#bdc5b8 transparent}
          the two can never disagree; what it buys is that painting a map and deciding how
          much it counts stop being in two different places -- which is what forced the hint
          under this strip to say "go and find it below". -->
-    <span class="fovlabel">follow it</span>
+    <label class="fovlabel" for="fovStrength">influence</label>
     <input type="range" id="fovStrength" min="0" max="1" step="0.01" value="0"
-           title="The same control as foveal_strength on the Allocation card: 0 ignores the map, 1 makes it a hard gate.">
+           title="0 ignores the map; 1 concentrates strokes only in marked areas.">
     <span class="fovnum" id="fovStrengthV">0.00</span>
     <span class="tsep"></span>
     <label class="tog"><input type="checkbox" id="fovShow" checked><span>show</span></label>
@@ -740,15 +739,14 @@ body.shell .rail{scrollbar-color:#bdc5b8 transparent}
          way out -- while the region mask beside it had both. The three strips share one
          grammar, and this was the hole in it. Grey PNG, BLACK MEANS SPEND THE STROKES
          HERE: `--foveal`'s convention, which is the one the project format follows. -->
-    <button id="fovSave" title="Write the focus map as a grey PNG. Black means spend the strokes there &mdash; the file scripts/paint.py --foveal reads.">Save map</button>
-    <button id="fovLoad" title="Load a focus map PNG painted somewhere else. Black means spend the strokes there &mdash; the same file Save map writes and scripts/paint.py --foveal reads.">Load map</button>
+    <button id="fovSave" title="Save the detail map as a grey PNG. Darker areas receive more strokes.">Save map</button>
+    <button id="fovLoad" title="Load a detail map PNG. Darker areas receive more strokes.">Load map</button>
     <input type="file" id="fovFile" accept="image/*" hidden>
     <button id="fovUndo" disabled>Undo</button>
     <button id="fovClear">Clear</button>
-    <span class="fovhint" id="fovHint">Paint where the eye should go &mdash; darker means more
-      strokes. The budget is <em>redistributed</em>, never increased, so lower the
-      <b>stroke budget</b> until the stats stop saying <b>ceiling</b>, or there is nothing
-      for the map to move.</span>
+    <button id="fovDone">Done</button>
+    <span class="fovhint" id="fovHint">Paint where you want more detail, across all layers.
+      If the effect is subtle, try a lower stroke budget. The map redistributes strokes.</span>
   </div>
 
   <div class="bar-row tstrip" id="rgnBar" hidden>
@@ -809,7 +807,13 @@ body.shell .rail{scrollbar-color:#bdc5b8 transparent}
   <div class="grip" id="railGrip" role="separator" aria-orientation="vertical" aria-label="Resize the inspector" tabindex="0" aria-valuemin="280" aria-valuemax="480" aria-valuenow="340"></div>
   <aside class="rail" aria-label="Painting controls">
     <div class="inspector-tabs" role="tablist" aria-label="Painting settings"><button id="tab-color" role="tab" aria-selected="true" aria-controls="panel-color" tabindex="0">Color</button><button id="tab-strokes" role="tab" aria-selected="false" aria-controls="panel-strokes" tabindex="-1">Strokes</button><button id="tab-flow" role="tab" aria-selected="false" aria-controls="panel-flow" tabindex="-1">Flow</button><button id="tab-light" role="tab" aria-selected="false" aria-controls="panel-light" tabindex="-1">Light</button></div>
-    <div class="inspector-scroll">  <details class="card" id="lyrPanel" hidden>
+    <div class="inspector-scroll">
+    <div class="detail-map-status" id="detailMapStatus" hidden>
+      <span id="detailMapLabel" role="status">Detail map active</span>
+      <button id="detailMapEdit" aria-label="Edit detail allocation map">Edit</button>
+      <button id="detailMapClear" aria-label="Clear detail allocation map">Clear</button>
+    </div>
+    <details class="card" id="lyrPanel" hidden>
     <summary><span class="layer-heading">Layers <em id="lyrCount"></em></span><span id="rgnEditing"></span></summary>
     <div id="rgnLayers"></div>
     <details class="layer-help"><summary>About layers</summary><div class="csub" id="rgnHint"></div></details>
@@ -820,9 +824,9 @@ body.shell .rail{scrollbar-color:#bdc5b8 transparent}
       <details class="adv" id="adv-color"><summary>Fine adjustments <em id="count-color"></em></summary><div class="cards" id="colorFine"></div></details>
     </section><section id="panel-strokes" class="inspector-panel" role="tabpanel" aria-labelledby="tab-strokes" tabindex="0" hidden>
       <div class="inspector-intro"><span class="eyebrow">02 / Mark making</span><h2>The brushwork</h2><p>Give every mark a character.</p></div>
-      <div class="stroke-actions">      <button id="reseed" title="Roll a new random seed: the same painting, arranged differently. The seed is in Strokes &rarr; Fine adjustments.">Vary strokes</button>
+      <div class="stroke-actions">      <button id="reseed" title="Roll a new random seed: the same painting, arranged differently. The seed is in Strokes &rarr; Advanced.">Vary strokes</button>
 </div><div class="cards" id="leftCards"></div>
-      <details class="adv" id="adv-strokes"><summary>Fine adjustments <em id="count-strokes"></em></summary><div class="cards" id="strokeFine"></div></details>
+      <details class="adv" id="adv-strokes"><summary>Advanced <em id="count-strokes"></em></summary><div class="cards" id="strokeFine"></div></details>
     </section><section id="panel-flow" class="inspector-panel" role="tabpanel" aria-labelledby="tab-flow" tabindex="0" hidden>
       <div class="inspector-intro"><span class="eyebrow">03 / Direction</span><h2>The movement</h2><p>Find the rhythm of your painting.</p></div>
       <div class="cards" id="flowCards"></div>
@@ -1212,10 +1216,12 @@ document.addEventListener('pointerdown', e => {
 // be off. Built fresh by `mkCard` rather than moved from the toolbar, because the panel is
 // rebuilt with `innerHTML = ''` and a node living inside a card would not survive it.
 //
-// `foveal_strength` is the obvious second entry and is deliberately not one: the foveal map
-// is about the ALLOCATION, and the swirl centres are the only tool whose availability is
-// decided by another control's value.
+// Detail allocation is an advanced control for the whole painting. Its map editor lives
+// beside its influence slider, while the main tool rail stays focused on everyday work.
 const CARD_TOOLS = {
+  foveal_strength: {id: 'fovBtn', label: 'Edit detail map',
+         title: 'Paint where to concentrate the existing stroke budget across the whole painting.',
+         click: () => fovMode($('#fovBar').hidden)},
   flow: {id: 'vtxBtn', label: 'Swirl centres',
          title: 'Place the swirl centres for a swirling flow field by hand. Click the '
               + 'picture to add one, click a marker to remove it. Click order decides '
@@ -1275,11 +1281,12 @@ const HIDDEN = ['base', 'base_cell_scale'];
 // there. All four are the preset's own shape choice, and all stay reachable under
 // Advanced.
 const FINE = {
+  Allocation: ['foveal_strength'],
   Palette: ['warm_cool', 'chroma', 'value_compress', 'pigment',
             'hue_target', 'hue_range', 'hue_rotate', 'hue_boost'],
   Flow: ['flow_coh', 'flow_scale', 'flow_rot', 'flow_drift'],
 };
-const FINE_CARD = name => `${name} · fine`;
+const FINE_CARD = name => name === 'Allocation' ? 'Detail allocation' : `${name} · fine`;
 // ...AND THE MIRROR OF IT. FINE demotes a field out of a front card; this promotes one in,
 // and it exists because the schema's groups are the ENGINE's filing and the front row is a
 // question about attention, which is not the same question.
@@ -1307,6 +1314,8 @@ const PROMOTE = {color_jitter: 'Palette'};
 // exactly what distinguishes it from the card it was demoted out of, and the claim is
 // measured -- it is the one-line summary of the scripts/knob_impact.py table over FINE.
 const noteFor = name => {
+  if(name === 'Detail allocation') return 'Guide where the whole painting spends its stroke budget. '
+    + 'Affects all layers; it does not add more strokes.';
   const base = name.replace(' · fine', '');
   return base !== name
     ? `Trims on the ${base.toLowerCase()} preset above \u2014 each moves the picture a `
@@ -1418,6 +1427,7 @@ async function boot(restore = true){
   // to agree with the rows the panel has just drawn.
   looksBuild();
   rgnLayersBuild(); rgnSyncRows();
+  fovSyncStrength();
   setStatus(haveImage ? '' : 'Waiting for an image.');
   // Last, and only if the visitor has not already dropped something while the engine was
   // starting -- boot() is async, and racing a real image with the sample would repaint the
@@ -1482,6 +1492,9 @@ const rowLead = (c, front) => {
 };
 
 function control(c, front){
+  if(c.name === 'foveal_strength') c = {...c, label: 'Map influence',
+    help: 'How strongly the detail map directs the stroke budget. 0 ignores the map; '
+      + '1 concentrates strokes only in marked areas. The total budget stays the same.'};
   const row = document.createElement('div');
   row.className = 'row' + (c.kind === 'bool' ? ' chk' : '');
   row.dataset.name = c.name;
@@ -1569,6 +1582,7 @@ function set(name, val){
     return;
   }
   params[name] = val;
+  if(name === 'foveal_strength') fovSyncStrength();
   publishSetup();
   // A look is only "the one you are on" while every field it sets still says what it set.
   // Moving any of them by hand takes the picture off the look, and the strip has to stop
@@ -1890,8 +1904,8 @@ function showStats(s, draft){
       s.flow_regions ? ` <span style="opacity:.65">+${s.flow_regions} layer${
         s.flow_regions > 1 ? 's' : ''}</span>` : ''}` : '',
     s.foveal ? (s.budget_reached
-      ? `foveal <b>${params.foveal_strength}</b>`
-      : `<span class="warn">&#9888; foveal map — nothing to redistribute at the ceiling</span>`) : '',
+      ? `detail map <b>${params.foveal_strength}</b>`
+      : `<span class="warn">&#9888; detail map — nothing to redistribute at the ceiling</span>`) : '',
     `painted at <b>${s.size}</b> in <b>${s.seconds}</b>s`,
     // Never let a capped "full res" pass silently: the whole defect being fixed here was a
     // toggle that promised the source's resolution and quietly gave something smaller.
@@ -2006,7 +2020,7 @@ function tagSource(text){
  *  could disagree about it. */
 const overlayName = () =>
     !$('#rgnBar').hidden ? 'mask'
-  : !$('#fovBar').hidden ? 'focus map'
+  : !$('#fovBar').hidden ? 'detail map'
   : !$('#vtxBar').hidden ? 'swirl centres'
   : '';
 
@@ -2596,6 +2610,7 @@ function maskInit(){
   maskInk = false;
   fovPristine = null;
   maskKey++;
+  detailMapStatus();
 }
 
 function maskClear(){
@@ -2604,6 +2619,7 @@ function maskClear(){
   maskInk = false;
   fovPristine = null;
   maskKey++;
+  detailMapStatus();
 }
 
 // Bumped whenever the pixels change, and ONLY then. The worker memoises the map's
@@ -2611,7 +2627,7 @@ function maskClear(){
 // its key would be painted from the previous stroke's tables -- the one failure mode the
 // parity suite reproduces on purpose (test_pipeline_parity, "a new map through a warm
 // cache is not served the old one").
-function maskTouched(){
+function maskTouched(arm = true){
   // The canvas is now the map, so a file it may have come from is stale. See fovPristine.
   fovPristine = null;
   maskKey++;
@@ -2619,7 +2635,8 @@ function maskTouched(){
   // A map nobody has told the allocator to read is a map that does nothing, and "I painted
   // and nothing happened" is the obvious first report. So the first ink arms the strength
   // at a middling value; after that the visitor owns the slider.
-  if(maskInk && !params.foveal_strength) setControl('foveal_strength', 0.6);
+  if(arm && maskInk && !params.foveal_strength) setControl('foveal_strength', 0.6);
+  detailMapStatus();
   schedule();
 }
 
@@ -2661,6 +2678,7 @@ function maskBytes(w, h){
  * phantom "mixed" option that somebody could then choose.
  */
 function showControl(name, value){
+  if(name === 'foveal_strength') fovSyncStrength();
   const row = document.querySelector(`.row[data-name="${name}"]`);
   if(!row) return;
   const mixed = value === MIXED;
@@ -2800,11 +2818,12 @@ function toolState(){
   // well as on the painting, which is what made the original argument only half right.
   if(fov || rgn || vtx) closeStudio();
   wipeSplit(fov || rgn || vtx);
-  $('#canvasHint').textContent = fov ? 'Paint focus on the source · preview on the right'
+  $('#canvasHint').textContent = fov ? 'Allocate detail on the source · preview on the right'
     : rgn ? 'Mark layers on the source · preview on the right'
     : vtx ? 'Place swirls on the source · preview on the right' : 'Drag the divider to compare';
-  $('#fovBtn').classList.toggle('on', fov);
-  $('#fovBtn').setAttribute('aria-pressed', String(fov));
+  $('#fovBtn')?.classList.toggle('on', fov);
+  $('#fovBtn')?.setAttribute('aria-pressed', String(fov));
+  if($('#fovBtn')) $('#fovBtn').textContent = fov ? 'Finish editing' : 'Edit detail map';
   $('#rgnBtn').classList.toggle('on', rgn);
   $('#rgnBtn').setAttribute('aria-pressed', String(rgn));
   $('#toolVtx').hidden = !vtx;
@@ -2838,7 +2857,7 @@ function fovMode(on){
   // recursing: turning a tool OFF never reaches for another.
   if(on){ rgnMode(false); vtxMode(false); }
   const c = $('#fovCanvas');
-  $('#fovBtn').setAttribute('aria-pressed', on ? 'true' : 'false');
+  $('#fovBtn')?.setAttribute('aria-pressed', on ? 'true' : 'false');
   $('#fovBar').hidden = !on;
   const visible = on && $('#fovShow').checked;
   c.hidden = !visible;
@@ -2848,7 +2867,10 @@ function fovMode(on){
   // The strip carries `foveal_strength`, so opening it has to show the value the panel
   // holds -- an armed tool whose own slider reads 0 while the picture follows the map at
   // 0.8 is the page contradicting itself.
-  if(on){ selectInspector('strokes'); fovSyncStrength(); fovMode.opened = true; }
+  if(on){
+    selectInspector('strokes'); $('#adv-strokes').open = true;
+    fovSyncStrength(); fovMode.opened = true;
+  }
   toolState();
 }
 
@@ -2857,11 +2879,30 @@ function fovSyncStrength(){
   const v = Number.isFinite(params.foveal_strength) ? params.foveal_strength : 0;
   $('#fovStrength').value = v;
   $('#fovStrengthV').textContent = fmt(v, 2);
+  detailMapStatus();
 }
 
-$('#fovBtn').addEventListener('click', () => fovMode($('#fovBar').hidden));
+function detailMapStatus(){
+  const present = !!(maskInk || fovPristine);
+  $('#detailMapStatus').hidden = !present;
+  $('#detailMapLabel').textContent = present
+    ? (!maskInk ? 'Detail map empty' : params.foveal_strength > 0 ? 'Detail map active' : 'Detail map paused') : '';
+}
+function clearDetailMap(){
+  undoSnap('fov'); maskClear(); schedule();
+  setStatus('Detail map cleared. Undo with Ctrl+Z or ⌘Z.');
+}
+$('#detailMapEdit').addEventListener('click', () => {
+  fovMode(true);
+  $('#fovBtn')?.scrollIntoView({block:'nearest'});
+  $('#fovBtn')?.focus({preventScroll:true});
+});
+$('#detailMapClear').addEventListener('click', clearDetailMap);
+$('#fovDone').addEventListener('click', () => {
+  fovMode(false); $('#fovBtn')?.focus({preventScroll:true});
+});
 $('#fovShow').addEventListener('change', () => fovMode(!$('#fovBar').hidden));
-$('#fovClear').addEventListener('click', () => { undoSnap('fov'); maskClear(); schedule(); });
+$('#fovClear').addEventListener('click', clearDetailMap);
 $('#fovSize').addEventListener('input', e => { $('#fovSizeV').textContent = e.target.value; });
 // Paint or wipe is what the click DOES, so it leads the strip and it changes the sentence
 // on the picture. The checkbox is unchanged underneath -- only its skin and its place.
@@ -3722,7 +3763,7 @@ $('#rgnClear').addEventListener('click', () => {
 // figure" than a round brush -- had no way in. Grey PNG, BLACK = spend the strokes here.
 $('#fovSave').addEventListener('click', () => {
   const png = fovealPng();
-  if(!png){ setStatus('nothing painted on the focus map yet'); return; }
+  if(!png){ setStatus('nothing painted on the detail map yet'); return; }
   download(maskNames(projectBase()).foveal, png);
 });
 $('#fovLoad').addEventListener('click', () => $('#fovFile').click());
@@ -3733,14 +3774,15 @@ $('#fovFile').addEventListener('change', async e => {
   undoSnap('fov');
   let url;
   try{ url = await readAs(f, 'readAsDataURL'); }
-  catch(err){ setStatus('that focus map would not read'); return; }
+  catch(err){ setStatus('that detail map would not read'); return; }
   // `importFoveal` ends in maskTouched(), which drops fovPristine -- so the bytes are
   // claimed AFTER it, not before, or the export would silently fall back to the canvas.
-  if(!await importFoveal(url)){ setStatus('that focus map would not decode'); return; }
+  if(!await importFoveal(url)){ setStatus('that detail map would not decode'); return; }
   fovPristine = url;
-  setStatus('focus map loaded');
+  detailMapStatus();
+  setStatus('detail map loaded');
   if(params.foveal_strength > 0) schedule();
-  else setStatus('focus map loaded — raise "follow it" above 0 for it to count');
+  else setStatus('detail map loaded — raise "influence" above 0 to use it');
 });
 $('#rgnSave').addEventListener('click', () => {
   const png = rgnPng();
@@ -3895,7 +3937,8 @@ function undoPixels(ctx, c){
 function undoSnap(kind){
   let e = null;
   if(kind === 'fov' && maskCtx && maskCanvas){
-    e = {kind, px: undoPixels(maskCtx, maskCanvas), what: 'the focus map'};
+    e = {kind, px: undoPixels(maskCtx, maskCanvas), pristine: fovPristine,
+      strength: params.foveal_strength, what: 'the detail map'};
   } else if(kind === 'rgn' && regionCtx && regionCanvas){
     e = {kind, px: undoPixels(regionCtx, regionCanvas),
          // The pixels are only half of a layer edit: `Delete all` and the row's own × take
@@ -3921,7 +3964,8 @@ function undoDo(){
   if(!e) return;
   if(e.kind === 'fov' && maskCtx){
     maskCtx.putImageData(new ImageData(e.px.data, e.px.w, e.px.h), 0, 0);
-    maskTouched();
+    maskTouched(false); fovPristine = e.pristine;
+    setControl('foveal_strength', e.strength);
   } else if(e.kind === 'rgn' && regionCtx){
     regionCtx.putImageData(new ImageData(e.px.data, e.px.w, e.px.h), 0, 0);
     regionLayers = e.layers;
@@ -4360,7 +4404,7 @@ function projectDoc(withMasks = true){
 function maskNamesPresent(){
   const out = [];
   if(rgnPristine || (regionCanvas && regionPresent && regionPresent.size)) out.push('mask');
-  if(fovPristine || maskInk) out.push('focus map');
+  if(fovPristine || maskInk) out.push('detail map');
   return out;
 }
 
@@ -4445,7 +4489,7 @@ function exportProject(){
   setStatus(files.length
     ? `project saved — ${1 + files.length} files: ${[base + '.oilpaint.json']
         .concat(files.map(f => f[0])).join(', ')} — allow multiple downloads if asked`
-    : 'project saved — no masks written: nothing is painted on the layers or the focus map');
+    : 'project saved — no masks written: nothing is painted on the layers or the detail map');
 }
 
 /** Draw a data URL onto a canvas, at that canvas's own size. Shared by both mask imports. */
@@ -4484,7 +4528,7 @@ async function importFoveal(url){
     im.data[4 * i + 3] = 255 - src[4 * i];      // black -> fully weighted
   }
   maskCtx.putImageData(im, 0, 0);
-  maskTouched();
+  maskTouched(false);
   return true;
 }
 
@@ -4556,7 +4600,7 @@ async function importProject(doc, sidecars){
   const nl = Object.keys(doc.regions || {}).length;
   if(nl) bits.push(nl + ' layer' + (nl > 1 ? 's' : ''));
   if(rgnUrl) bits.push('a mask');
-  if(fovUrl) bits.push('a focus map');
+  if(fovUrl) bits.push('a detail map');
   setStatus('project loaded — ' + bits.join(', ')
             + (missing.length ? ` — MISSING ${missing.join(', ')}, `
                                 + 'open the project and its .png files together' : ''));

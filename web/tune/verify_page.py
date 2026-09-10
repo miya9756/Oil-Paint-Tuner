@@ -621,7 +621,7 @@ def page_runtime(node):
           "switching tabs preserves live control nodes")
     check(hot.get("inspectorCards") == {
         "color": ["Palette", "Palette · fine"],
-        "strokes": ["Allocation", "Geometry", "Irregularity", "Paint"],
+        "strokes": ["Allocation", "Detail allocation", "Geometry", "Irregularity", "Paint"],
         "flow": ["Flow", "Flow · fine"], "light": ["Impasto"]},
           "each inspector owns its related settings and fine adjustments",
           str(hot.get("inspectorCards")))
@@ -704,7 +704,7 @@ def page_runtime(node):
     check("MISSING" in miss and want["regions"] in miss,
           "a bundle opened without its masks says which files it wanted", miss)
     check("a mask" in (hot.get("projectStatus") or "")
-          and "a focus map" in (hot.get("projectStatus") or ""),
+          and "a detail map" in (hot.get("projectStatus") or ""),
           "...and opened WITH them, both arrive", str(hot.get("projectStatus")))
 
     # ---- COPY SETUP WRITES SOMETHING THAT OPENS -----------------------------------
@@ -727,7 +727,7 @@ def page_runtime(node):
     # ---- THE FOCUS MAP HAS THE PAIR THE REGION MASK ALWAYS HAD --------------------
     check(hot.get("fovSaved") == [want["foveal"]],
           "the focus map can be written as its own PNG", str(hot.get("fovSaved")))
-    check("focus map loaded" in (hot.get("fovFileLoaded") or ""),
+    check("detail map loaded" in (hot.get("fovFileLoaded") or ""),
           "...and one painted elsewhere can be loaded back in",
           str(hot.get("fovFileLoaded")))
     # THE PAGE OPENS ON A PAINTING. The deployed tuner ships the sample photograph AND the
@@ -829,6 +829,10 @@ def page_runtime(node):
           "reference", str(front.get("Palette")))
     check(front.get("Flow") == ["flow", "flow_strength"],
           "and the front Flow card is the preset and its strength", str(front.get("Flow")))
+    detail = next((c for c in cold["advCards"] if c["name"] == "Detail allocation"), {})
+    check("foveal_strength" not in front.get("Allocation", [])
+          and detail.get("rows") == ["foveal_strength"] and detail.get("tools") == ["fovBtn"],
+          "detail allocation and its map editor live together under Advanced", str(detail))
     # THE SWIRL TOOL LIVES ON THAT CARD, not in the toolbar: it is a property of the flow
     # field, so it belongs where the field is chosen -- and, more usefully, where its dimmed
     # state reads as "this field has no swirls in it". Read off the card the page BUILT, so
@@ -1019,7 +1023,7 @@ def page_runtime(node):
               for k in ("fov", "rgn", "vtx")) and every["none"]["split"] is False,
           "every picture tool splits the view, and putting them away restores the wipe",
           str({k: (v.get("off"), v["split"]) for k, v in every.items()}))
-    check(every["fov"]["tag"].endswith("+ focus map")
+    check(every["fov"]["tag"].endswith("+ detail map")
           and every["rgn"]["tag"].endswith("+ mask")
           and every["vtx"]["tag"].endswith("+ swirl centres")
           and not every["none"]["tag"].endswith("centres"),

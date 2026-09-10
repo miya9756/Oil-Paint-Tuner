@@ -67,7 +67,7 @@ reference sets the mood, the palette sets the tubes.
 ## The panel
 
 Seven groups of controls live in the **Color**, **Strokes**, **Flow**, and **Light** tabs.
-The main choices come first; each tab folds its detailed trims under **Fine adjustments**.
+The main choices come first; each tab keeps its detailed adjustments folded away.
 
 | group                  | what it changes                                                                                                                                                        |
 | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -258,11 +258,15 @@ lose your work.
 
 ## The atelier workspace
 
-The tool rail holds **Compare**, **Focus**, **Layers**, and **Light**. A single inspector
+The tool rail holds **Compare**, **Layers**, and **Light**. A single inspector
 groups settings into **Color**, **Strokes**, **Flow**, and **Light**, with fine adjustments
 under each tab. Use the arrow keys, Home, or End to navigate the tabs; the divider beside
 the inspector can also be resized with the keyboard. **Project** contains setup import,
 export, and reset actions. Help and render statistics are under **Workspace options**.
+
+The optional detail map lives in **Strokes → Advanced → Detail allocation**. It guides
+the shared stroke budget across the whole painting. Projects with a map show an active
+or paused notice with **Edit** and **Clear**; existing maps remain compatible.
 
 **View painting** opens a framed gallery view of the existing render. **Back to editing**
 or Escape restores your inspector, tool, and layer selection. Gallery mode does not change
