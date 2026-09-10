@@ -271,20 +271,34 @@ row and the painting stays above the scrollable controls.
 
 ## Studio light
 
-Choose **Light** on the tool rail, or **Explore studio light** in the inspector, to explore the relief of your painting. Drag across the canvas to
-move the light, use the direction and height sliders, or try **Daylight**, **Raking light**,
-and **Overhead**. The arrow keys also move the light when the preview has focus.
+Choose **Light** on the tool rail, or **Enter the studio** in the inspector, to hang your
+painting in a 3D clockwork salon, with curved walnut furniture, a porcelain tea service,
+and a suspended chandelier. Brass gears turn slowly behind bronze-framed glass. Soft shadows,
+reflected light, and a softly reflective stone floor give the room its depth. Drag to look around.
+Dark timber ribs and brass trim finish the edges, and the view stays within the gallery.
+Use the +/− buttons to move closer or step
+back. **Reset view** brings you home. The expand icon beside **Close-up** opens the studio
+fullscreen; Escape returns to the editor layout. Choose oak, walnut, or black framing, and switch
+between **Amber daylight** and **After hours** to see it under the room's spotlights.
+**Clockwork motion** pauses or resumes the linked gears in the display cases.
+
+Use the direction and height sliders to light the brushwork, or try **Daylight**, **Raking
+light**, and **Overhead**. **Close-up** fills the view with the painting and lets you drag
+the light directly. The arrow keys move the light in either view. In the room, Shift +
+arrow keys change your viewpoint, +/− change distance, and Home resets the camera.
 
 **Apply lighting** keeps the chosen light in your settings and renders it into the PNG.
-**Cancel** or Escape returns to the painting without changing it. The preview uses the
-actual brush-height data and the same lighting model as the painter; large previews are
-limited to 1400 pixels on their long side. PNG export still uses the normal rendering
-pipeline at the selected resolution.
+**Cancel** or Escape returns to the painting without changing it. Frame, room atmosphere,
+and viewpoint are presentation choices and do not appear in the PNG. The brushwork uses
+the same lighting as the painter, so the close-up lets you judge the light you will save.
 
-The Three.js preview loads on demand from the local, pinned files in `web/tune/vendor/`.
+The Three.js preview and its bundled furniture load on demand from local files.
+The supplied furniture models have repaired faces and normals; their preparation notes
+are in [the asset folder](web/tune/studio-assets/README.md).
 It needs WebGL 2; if that is unavailable, the ordinary painter and its lighting sliders
-remain usable. No image is sent elsewhere. Look changes use a short brush reveal, and
-the interface respects the system's reduced-motion preference.
+remain usable. No image is sent elsewhere. The gears respect reduced motion and pause
+when the tab is hidden or you switch to Close-up. With motion off, the room stops drawing
+once the camera settles. Look changes use a short brush reveal.
 
 The optional GPU and interaction checks use Node 22+ and a local Chrome debugging session:
 

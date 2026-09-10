@@ -655,9 +655,17 @@ body.shell .rail{scrollbar-color:#bdc5b8 transparent}
     <div class="canvas-caption"><span class="eyebrow">Your canvas</span><span id="canvasHint">Drag the divider to compare</span></div>
   <div class="stage">
     <div id="studioView" class="studio-view" hidden>
-      <div class="studio-caption"><span>Light study</span><span>Your painting &middot; real brush relief</span></div>
+      <div class="studio-caption"><span>The clockwork salon</span></div>
+      <div class="studio-view-switch" role="group" aria-label="Studio view and fullscreen">
+        <button id="studioRoom" aria-pressed="true">Room</button><button id="studioDetail" aria-pressed="false">Close-up</button>
+        <button id="studioExpand" aria-label="Expand studio to fullscreen" title="Expand studio to fullscreen" aria-pressed="false"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M7 3H3v4m10-4h4v4M3 13v4h4m10-4v4h-4"/></svg></button>
+      </div>
       <canvas id="studioCanvas" tabindex="0" aria-label="Studio light preview. Drag to move the light, or use arrow keys." aria-describedby="studioGesture"></canvas>
-      <p id="studioGesture" class="studio-gesture">Drag across the painting to move the light</p>
+      <div id="studioViewTools" class="studio-view-tools" role="group" aria-label="Gallery camera">
+        <button id="studioFar" aria-label="Step back" title="Step back">−</button><button id="studioNear" aria-label="Move closer" title="Move closer">+</button>
+        <button id="studioResetView">Reset view</button>
+      </div>
+      <p id="studioGesture" class="studio-gesture">Drag to look around &middot; use the sliders to move the light</p>
     </div>
     <div id="drop" role="button" tabindex="0" aria-label="Choose an image">
       <b>Start with a photograph</b><br>Drop an image, click to browse, or paste from your clipboard.<br>
@@ -821,10 +829,24 @@ body.shell .rail{scrollbar-color:#bdc5b8 transparent}
       <details class="adv" id="adv-flow"><summary>Fine adjustments <em id="count-flow"></em></summary><div class="cards" id="flowFine"></div></details>
     </section><section id="panel-light" class="inspector-panel" role="tabpanel" aria-labelledby="tab-light" tabindex="0" hidden>
       <div class="inspector-intro"><span class="eyebrow">04 / Depth</span><h2>The surface</h2><p>Let the light find the paint.</p></div>
-      <div class="light-invitation" id="lightInvitation"><span class="eyebrow">An interactive light study</span><p>Move the light across your painting and watch the brushwork catch it.</p><button id="inspectorStudio" disabled>Explore studio light <span aria-hidden="true">&nearr;</span></button></div>
+      <div class="light-invitation" id="lightInvitation"><span class="eyebrow">The clockwork salon</span><p>Brass turning slowly behind glass. A little tea, a quiet seat, and your painting in the light.</p><button id="inspectorStudio" disabled>Enter the studio <span aria-hidden="true">&nearr;</span></button></div>
         <div id="studioNote" role="status" hidden></div><button id="studioEnable" hidden>Enable paint texture</button>  <section id="studioBar" class="studio-bar" aria-label="Studio lighting" hidden>
+    <div id="studioRoomOptions" class="studio-room-options">
+      <div class="studio-option"><span class="eyebrow">The frame</span><div role="group" aria-label="Frame finish">
+        <button id="frameOak" aria-pressed="false"><i class="frame-sample oak" aria-hidden="true"></i>Oak</button>
+        <button id="frameWalnut" aria-pressed="true"><i class="frame-sample walnut" aria-hidden="true"></i>Walnut</button>
+        <button id="frameBlack" aria-pressed="false"><i class="frame-sample black" aria-hidden="true"></i>Black</button>
+      </div></div>
+      <div class="studio-option"><span class="eyebrow">The room</span><div role="group" aria-label="Room atmosphere">
+        <button id="roomLinen" aria-pressed="true">Amber daylight</button><button id="roomEvening" aria-pressed="false">After hours</button>
+      </div></div>
+      <label class="studio-motion"><span>Clockwork motion</span><input id="studioMotion" type="checkbox" role="switch" checked aria-describedby="studioMotionNote"></label>
+      <p id="studioMotionNote" class="studio-motion-note">Slow brass gears, a quiet rhythm.</p>
+      <p class="studio-room-note">Frame and room are just for viewing. Your PNG contains the painting.</p>
+    </div>
     <div class="studio-topline">
       <h2>Find your light</h2>
+      <span class="eyebrow studio-light-label">Light on the painting</span>
       <div class="studio-presets" role="group" aria-label="Lighting presets">
         <button id="lightDay" aria-pressed="false">Daylight</button>
         <button id="lightRake" aria-pressed="false">Raking light</button>
@@ -877,6 +899,9 @@ let SCHEMA = [], DEFAULTS = {}, params = {}, haveImage = false, lastPng = null;
 let freshVisit = false;
 let studioActive = false, studioLoading = false, studioGeneration = 0, studioGPU = null;
 let studioLast = null, studioDraft = null;
+let studioPresentation = 'room', studioFrame = 'walnut', studioAmbience = 'linen';
+let studioMotion = true;
+const studioMotionMedia = window.matchMedia?.('(prefers-reduced-motion: reduce)');
 let lookRevealPending = false, lookRevealSource = null;
 const brushReveal = createBrushReveal($('#lookReveal'));
 // The one-line note under each card heading, from the engine. Empty against an engine
@@ -4685,6 +4710,7 @@ function studioMessage(text){
 }
 function closeStudio(){
   if(!studioActive && !studioLoading) return;
+  if(document.fullscreenElement === $('#studioView')) document.exitFullscreen?.().catch(()=>{});
   studioGeneration++; studioActive = false; studioLoading = false;
   if(studioGPU){ studioGPU.dispose(); studioGPU = null; }
   $('#studioView').hidden = true; $('#studioBar').hidden = true;
@@ -4702,13 +4728,44 @@ function closeStudio(){
 function studioResize(){
   if(!studioGPU || !studioLast) return;
   const view = $('#studioView');
-  const availW = Math.max(1, view.clientWidth - 50);
-  const availH = Math.max(1, view.clientHeight - 88);
-  const a = studioLast.w / studioLast.h;
-  const w = Math.min(availW, availH * a), h = w / a;
+  const w = Math.max(1, view.clientWidth), h = Math.max(1, view.clientHeight);
   const canvas = $('#studioCanvas');
   canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
   studioGPU.resize(w, h);
+}
+function studioView(name){
+  studioPresentation = name;
+  const room = name === 'room';
+  $('#studioView').classList.toggle('is-room', room);
+  $('#studioRoomOptions').hidden = !room; $('#studioViewTools').hidden = !room;
+  $('#studioRoom').setAttribute('aria-pressed', String(room));
+  $('#studioDetail').setAttribute('aria-pressed', String(!room));
+  $('#studioGesture').textContent = room ? (document.fullscreenElement === $('#studioView')
+    ? 'Drag to look around · arrow keys move the light · Esc to return'
+    : 'Drag to look around · use the sliders to move the light')
+    : 'Drag across the painting to move the light';
+  if(studioGPU) studioGPU.presentation(name);
+}
+function studioFinish(name){
+  studioFrame = name;
+  for(const [id, value] of [['#frameOak','oak'],['#frameWalnut','walnut'],['#frameBlack','black']])
+    $(id).setAttribute('aria-pressed', String(name === value));
+  if(studioGPU) studioGPU.frame(name);
+}
+function studioRoomMood(name){
+  studioAmbience = name;
+  $('#roomLinen').setAttribute('aria-pressed', String(name === 'linen'));
+  $('#roomEvening').setAttribute('aria-pressed', String(name === 'evening'));
+  $('#studioView').classList.toggle('after-hours', name === 'evening');
+  if(studioGPU) studioGPU.ambience(name);
+}
+function syncStudioMotion(){
+  const reduced = !!studioMotionMedia?.matches;
+  $('#studioMotion').checked = studioMotion && !reduced;
+  $('#studioMotion').disabled = reduced;
+  $('#studioMotionNote').textContent = reduced ? 'Gears paused · follows your reduced motion setting.'
+    : studioMotion ? 'Slow brass gears, a quiet rhythm.' : 'Gears paused. Take your time.';
+  studioGPU?.motion(studioMotion);
 }
 function studioLight(az, el){
   studioDraft = { az, el };
@@ -4755,6 +4812,7 @@ async function openStudio(){
     });
     if(mine !== studioGeneration){ gpu.dispose(); return; }
     studioGPU = gpu;
+    studioView(studioPresentation); studioFinish(studioFrame); studioRoomMood(studioAmbience); syncStudioMotion();
     gpu.setSurface(answer.data, last.params);
     studioActive = true; studioLoading = false;
     $('#studioView').hidden = false; $('#studioBar').hidden = false;
@@ -4773,6 +4831,34 @@ async function openStudio(){
 }
 $('#studioBtn').addEventListener('click', openStudio);
 $('#inspectorStudio').addEventListener('click', openStudio);
+$('#studioRoom').addEventListener('click', () => studioView('room'));
+$('#studioDetail').addEventListener('click', () => studioView('detail'));
+$('#studioExpand').disabled = !$('#studioView').requestFullscreen;
+$('#studioExpand').addEventListener('click', async () => {
+  try {
+    if(document.fullscreenElement === $('#studioView')) await document.exitFullscreen();
+    else await $('#studioView').requestFullscreen();
+  } catch { studioMessage('Fullscreen is unavailable in this browser. You can still explore the room here.'); }
+});
+document.addEventListener('fullscreenchange', () => {
+  const expanded = document.fullscreenElement === $('#studioView');
+  $('#studioExpand').setAttribute('aria-pressed',String(expanded));
+  const label = expanded ? 'Exit studio fullscreen' : 'Expand studio to fullscreen';
+  $('#studioExpand').setAttribute('aria-label',label); $('#studioExpand').title = label;
+  if(studioActive) studioView(studioPresentation);
+  studioResize();
+});
+$('#studioNear').addEventListener('click', () => studioGPU?.zoom(-.08));
+$('#studioFar').addEventListener('click', () => studioGPU?.zoom(.08));
+$('#studioResetView').addEventListener('click', () => studioGPU?.resetView());
+$('#frameOak').addEventListener('click', () => studioFinish('oak'));
+$('#frameWalnut').addEventListener('click', () => studioFinish('walnut'));
+$('#frameBlack').addEventListener('click', () => studioFinish('black'));
+$('#roomLinen').addEventListener('click', () => studioRoomMood('linen'));
+$('#roomEvening').addEventListener('click', () => studioRoomMood('evening'));
+$('#studioMotion').addEventListener('change', e => { studioMotion = e.target.checked; syncStudioMotion(); });
+studioMotionMedia?.addEventListener?.('change', syncStudioMotion);
+syncStudioMotion();
 $('#studioClose').addEventListener('click', () => { closeStudio(); $('#studioBtn').focus(); });
 $('#studioAz').addEventListener('input', e => studioLight(Number(e.target.value), Number($('#studioEl').value)));
 $('#studioEl').addEventListener('input', e => studioLight(Number($('#studioAz').value), Number(e.target.value)));
@@ -4794,12 +4880,12 @@ $('#studioEnable').addEventListener('click', async () => {
   if(studioLast?.params.impasto) openStudio();
 });
 window.addEventListener('keydown', e => {
-  if(e.key === 'Escape' && (studioActive || studioLoading)){
+  if(e.key === 'Escape' && (studioActive || studioLoading) && document.fullscreenElement !== $('#studioView')){
     closeStudio(); $('#studioBtn').focus();
   }
 });
 window.addEventListener('resize', studioResize);
-if(typeof ResizeObserver !== 'undefined') new ResizeObserver(studioResize).observe($('.stage'));
+if(typeof ResizeObserver !== 'undefined') new ResizeObserver(studioResize).observe($('#studioView'));
 
 // ---- buttons ------------------------------------------------------------------------
 $('#render').addEventListener('click', render);

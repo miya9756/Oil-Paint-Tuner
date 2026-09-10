@@ -39,13 +39,17 @@ from oilpaint.schema import as_dict  # noqa: E402
 # the package as ES modules for the parity tests, and the browser needs no such hint.
 # One page: the tuner carries the living painting inline (the animator and live pages were
 # folded into it -- see CLAUDE.md), so the whole tool is index.html plus its worker.
-ASSETS = ["index.html", "engine.worker.js", "session.js", "studio.js", "studio.css", "atelier.css",
+ASSETS = ["index.html", "engine.worker.js", "session.js", "studio.js", "studio-room.js", "studio-clockwork.js", "studio-furniture.js", "studio-renderer.js", "studio-textures.js", "studio-assets/materials.json", "studio.css", "atelier.css",
           "vendor/three.module.min.js", "vendor/three.core.min.js", "vendor/THREE-LICENSE.txt"]
+ASSETS += sorted(os.path.relpath(os.path.join(dp,f),HERE).replace(os.sep,"/")
+                 for dp,_,files in os.walk(os.path.join(HERE,"vendor","addons"))
+                 for f in files if f.endswith(".js"))
 # Binary assets, kept apart from ASSETS because the import-resolution pass below opens every
 # name in ASSETS as TEXT -- a .jpg in that list is a UnicodeDecodeError, not a broken import.
 # `sample.jpg` is the image the page loads on its own so the tool is usable the moment it
 # opens; it is excluded from Git LFS in .gitattributes, which explains why.
-MEDIA = ["sample.jpg"]
+MEDIA = ["sample.jpg", "studio-assets/tea-furniture.glb", "studio-assets/chandelier.glb"]
+MEDIA += [f"studio-assets/{name}-{kind}.jpg" for name in ("wood","stone","plaster") for kind in ("color","normal","rough")]
 PACKAGE = "oilpaint"  # web/tune/oilpaint/*.js -- every .js in it ships
 # THE SETUP THE PAGE OPENS WITH, copied out of examples/ rather than kept as a second copy
 # under web/tune/. It is the same file `scripts/paint.py --project` takes and the same one

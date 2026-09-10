@@ -1,0 +1,56 @@
+{
+  "wood_table_001": {
+    "source": "https://polyhaven.com/a/wood_table_001",
+    "license": "CC0",
+    "files": {
+      "wood-color.jpg": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_table_001/wood_table_001_diff_1k.jpg",
+        "md5": "56652a7339b16a76afad20d3585f66ea"
+      },
+      "wood-normal.jpg": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_table_001/wood_table_001_nor_gl_1k.jpg",
+        "md5": "6360e09967add8baecaa5ecc55fb5e03"
+      },
+      "wood-rough.jpg": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/wood_table_001/wood_table_001_rough_1k.jpg",
+        "md5": "05b60bd20a1cc4355c5d73a99b245d44"
+      }
+    }
+  },
+  "marble_01": {
+    "source": "https://polyhaven.com/a/marble_01",
+    "license": "CC0",
+    "files": {
+      "stone-color.jpg": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/marble_01/marble_01_diff_1k.jpg",
+        "md5": "04325ced5018eb8a2e598a4ef69cb176"
+      },
+      "stone-normal.jpg": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/marble_01/marble_01_nor_gl_1k.jpg",
+        "md5": "fa073d722cde733c1bd6cc6e8897c8e3"
+      },
+      "stone-rough.jpg": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/marble_01/marble_01_rough_1k.jpg",
+        "md5": "59cef1be1b7376c9d0dcc7a64adf7882"
+      }
+    }
+  },
+  "beige_wall_001": {
+    "source": "https://polyhaven.com/a/beige_wall_001",
+    "license": "CC0",
+    "files": {
+      "plaster-color.jpg": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/beige_wall_001/beige_wall_001_diff_1k.jpg",
+        "md5": "a99610d7d72ec6fb20ae991ad69b3eb7"
+      },
+      "plaster-normal.jpg": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/beige_wall_001/beige_wall_001_nor_gl_1k.jpg",
+        "md5": "2f5fc5b63c425b359089468f4d719ef5"
+      },
+      "plaster-rough.jpg": {
+        "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/beige_wall_001/beige_wall_001_rough_1k.jpg",
+        "md5": "40d8616d65055c4c984a2807ce933287"
+      }
+    }
+  }
+}

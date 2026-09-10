@@ -78,6 +78,9 @@ jobs:
       - name: core invariants
         run: python tests/test_core.py
 
+      - name: museum mesh integrity
+        run: python tests/test_studio_assets.py
+
       # The three parity suites, which are what hold web/tune/oilpaint/*.js to oilpaint/*.py:
       #   rng      -- nprandom.js reproduces numpy's PCG64 and ziggurat bit for bit. FIRST:
       #               every other parity result is meaningless if the stroke jitter comes

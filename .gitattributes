@@ -108,6 +108,8 @@ assets/readme-*.png  -filter -diff -merge -text
 *.ply    filter=lfs diff=lfs merge=lfs -text
 *.glb    filter=lfs diff=lfs merge=lfs -text
 *.gltf   filter=lfs diff=lfs merge=lfs -text
+web/tune/studio-assets/*.glb -filter -diff -merge -text
+web/tune/studio-assets/*.jpg -filter -diff -merge -text
 
 # Fonts
 *.woff   filter=lfs diff=lfs merge=lfs -text

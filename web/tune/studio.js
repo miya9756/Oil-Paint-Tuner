@@ -7,20 +7,24 @@ const direction = (az, el) => {
 };
 
 export async function createStudio(canvas, onMove, onLost) {
-  const THREE = await import('./vendor/three.module.min.js');
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false });
+  const [THREE, { createRoom }, { createMuseumRenderer }] = await Promise.all([
+    import('./vendor/three.module.min.js'), import('./studio-room.js'), import('./studio-renderer.js')]);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.autoUpdate = false;
   const uniforms = {
     colorMap: { value: null }, surfaceMap: { value: null },
     lightDir: { value: new THREE.Vector3() }, viewDir: { value: new THREE.Vector3() },
-    gloss: { value: 0.3 }, ambient: { value: 0.5 },
+    gloss: { value: 0.3 }, ambient: { value: 0.5 }, detailScale: { value: new THREE.Vector2(1, 1) },
   };
   // This is render.light's Phong expression, operating on its real surface normals
   // and pre-light sRGB colors. No additional tone mapping or color-space conversion.
   const material = new THREE.ShaderMaterial({
     uniforms, depthTest: false, depthWrite: false, toneMapped: false,
-    vertexShader: `varying vec2 vUv;
-      void main(){ vUv=vec2(uv.x,1.0-uv.y); gl_Position=vec4(position.xy,0.0,1.0); }`,
+    vertexShader: `varying vec2 vUv; uniform vec2 detailScale;
+      void main(){ vUv=vec2(uv.x,1.0-uv.y); gl_Position=vec4(position.xy*detailScale,0.0,1.0); }`,
     fragmentShader: `precision highp float;
       varying vec2 vUv;
       uniform sampler2D colorMap, surfaceMap;
@@ -39,14 +43,47 @@ export async function createStudio(canvas, onMove, onLost) {
   });
   const geometry = new THREE.PlaneGeometry(2, 2);
   const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x292c29);
   scene.add(new THREE.Mesh(geometry, material));
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  let frame = 0, dead = false, ready = false, azimuth = 135, elevation = 35;
+  const roomMaterial = new THREE.ShaderMaterial({ uniforms, toneMapped: false,
+    vertexShader: `varying vec2 vUv;
+      void main(){ vUv=vec2(uv.x,1.0-uv.y); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+    fragmentShader: material.fragmentShader.replace('gl_FragColor=vec4(clamp(rgb,0.0,1.0),1.0);',
+      `vec3 c=clamp(rgb,0.0,1.0);
+       c=mix(c/12.92,pow((c+.055)/1.055,vec3(2.4)),step(vec3(.04045),c));
+       gl_FragColor=vec4(c,1.0);
+       #include <colorspace_fragment>`) });
+  const room = createRoom(THREE, roomMaterial);
+  let museum = null;
+  try { await room.ready; museum = createMuseumRenderer(THREE,renderer,room); }
+  catch (error) {
+    museum?.dispose();
+    room.dispose(); roomMaterial.dispose(); geometry.dispose(); material.dispose();
+    renderer.dispose(); renderer.forceContextLoss(); throw error;
+  }
+  room.frame('walnut'); room.ambience('linen');
+  let mode = 'room', frame = 0, dead = false, ready = false, azimuth = 135, elevation = 35;
+  let pixelWidth = 1, pixelHeight = 1, imageAspect = 1, previousTime = 0, motion = true;
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  function render(now = performance.now()) {
+    const moving = room.update(Math.min(50, now - previousTime || 16), reduced.matches, motion && mode === 'room');
+    previousTime = now;
+    if(mode === 'room') {
+      // Shadows follow the turning spokes. Pausing the room still releases the loop.
+      if (moving) renderer.shadowMap.needsUpdate = true;
+      museum.render();
+    }
+    else { renderer.toneMapping = THREE.NoToneMapping; renderer.render(scene,camera); }
+    return moving && mode === 'room';
+  }
   const draw = () => {
-    if (dead || frame || !ready) return;
-    frame = requestAnimationFrame(() => {
+    if (dead || frame || !ready || document.hidden) return;
+    frame = requestAnimationFrame(now => {
       frame = 0;
-      if (!dead) renderer.render(scene, camera);
+      // The lounge is deliberately slow: cap continuous drawing at 30fps.
+      if (motion && !reduced.matches && mode === 'room' && now - previousTime < 32) { draw(); return; }
+      if (!dead && !document.hidden && render(now)) draw();
     });
   };
   const textures = [];
@@ -54,7 +91,12 @@ export async function createStudio(canvas, onMove, onLost) {
   function light(az, el) {
     azimuth = az; elevation = el;
     uniforms.lightDir.value.set(...direction(az, el));
+    room.light(az, el); renderer.shadowMap.needsUpdate = true;
     draw();
+  }
+  function fitDetail() {
+    const ratio = pixelWidth / pixelHeight;
+    uniforms.detailScale.value.set(Math.min(1, imageAspect / ratio), Math.min(1, ratio / imageAspect));
   }
   function fromPointer(e) {
     const rect = canvas.getBoundingClientRect();
@@ -64,14 +106,41 @@ export async function createStudio(canvas, onMove, onLost) {
     const el = 85 - clamp(Math.hypot(x, y), 0, 1) * 80;
     onMove(Math.round(az), Math.round(el));
   }
+  let pointer = null;
   const down = e => {
     if (!ready || e.button !== 0) return;
     canvas.focus({ preventScroll: true });
-    canvas.setPointerCapture(e.pointerId); fromPointer(e); e.preventDefault();
+    if (pointer) return;
+    pointer = { id: e.pointerId, x: e.clientX, y: e.clientY };
+    canvas.setPointerCapture(e.pointerId);
+    if (mode === 'detail') fromPointer(e);
+    canvas.classList.add('dragging'); e.preventDefault();
   };
-  const move = e => { if (canvas.hasPointerCapture(e.pointerId)) fromPointer(e); };
-  const up = e => { if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId); };
+  const move = e => {
+    if (pointer?.id !== e.pointerId) return;
+    if (mode === 'room') {
+      room.orbit((pointer.x - e.clientX) * .004, (e.clientY - pointer.y) * .003); draw();
+      pointer.x = e.clientX; pointer.y = e.clientY;
+    } else fromPointer(e);
+  };
+  const up = e => {
+    if (pointer?.id !== e.pointerId) return;
+    if (canvas.hasPointerCapture(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
+    pointer = null; canvas.classList.remove('dragging');
+  };
   const key = e => {
+    if (mode === 'room') {
+      if (e.key === 'Home') { e.preventDefault(); room.reset(!reduced.matches); draw(); return; }
+      if (e.key === '+' || e.key === '=' || e.key === '-') {
+        e.preventDefault(); room.zoom(e.key === '-' ? .08 : -.08); draw(); return;
+      }
+      if (e.shiftKey && e.key.startsWith('Arrow')) {
+        e.preventDefault();
+        room.orbit(e.key === 'ArrowLeft' ? -.06 : e.key === 'ArrowRight' ? .06 : 0,
+          e.key === 'ArrowUp' ? .03 : e.key === 'ArrowDown' ? -.03 : 0);
+        draw(); return;
+      }
+    }
     let az = azimuth, el = elevation;
     if (e.key === 'ArrowLeft') az = (az + 355) % 360;
     else if (e.key === 'ArrowRight') az = (az + 5) % 360;
@@ -82,10 +151,26 @@ export async function createStudio(canvas, onMove, onLost) {
   };
   const lost = e => { e.preventDefault(); onLost(); };
   const events = { pointerdown: down, pointermove: move, pointerup: up,
-    pointercancel: up, keydown: key, webglcontextlost: lost };
+    pointercancel: up, lostpointercapture: up, keydown: key, webglcontextlost: lost };
   Object.entries(events).forEach(([name, fn]) => canvas.addEventListener(name, fn));
+  document.addEventListener('visibilitychange', draw);
+  reduced.addEventListener('change', draw);
   return {
     light,
+    presentation(name) {
+      mode = name === 'detail' ? 'detail' : 'room'; canvas.dataset.presentation = mode;
+      canvas.setAttribute('aria-label', mode === 'room'
+        ? 'Framed painting in a warm clockwork salon with brass gears behind glass, a chair, and a tea table. Drag to look around. Arrow keys move the light; Shift and arrows move the viewpoint. Home resets the view.'
+        : 'Painting light close-up. Drag or use arrow keys to move the light.');
+      draw();
+    },
+    frame(name) { room.frame(name); draw(); },
+    ambience(name) { room.ambience(name); draw(); },
+    motion(enabled) { motion = !!enabled; previousTime = performance.now(); draw(); },
+    zoom(delta) { room.zoom(delta); draw(); },
+    resetView() { room.reset(!reduced.matches); draw(); },
+    inspect() { return { mode, ...room.inspect(), ...museum.inspect(), motion: motion && !reduced.matches, frames: renderer.info.render.frame,
+      geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures }; },
     setSurface(data, cfg) {
       disposeTextures();
       const color = new THREE.DataTexture(new Uint8Array(data.color), data.w, data.h);
@@ -100,18 +185,30 @@ export async function createStudio(canvas, onMove, onLost) {
       uniforms.ambient.value = data.ambient;
       uniforms.gloss.value = cfg.gloss;
       uniforms.viewDir.value.set(...direction(cfg.view_deg, cfg.view_elev_deg));
+      imageAspect = data.w / data.h; fitDetail(); room.setArtwork(imageAspect);
+      room.enter(reduced.matches);
       ready = true;
       light(cfg.light_deg, cfg.light_elev_deg);
       // Compile now so a GPU/compiler failure returns to the normal image immediately.
       renderer.debug.onShaderError = () => { throw new Error('Lighting shader unavailable'); };
-      renderer.render(scene, camera);
+      render();
     },
     resize(width, height) {
-      renderer.setSize(Math.max(1, width), Math.max(1, height), false); draw();
+      pixelWidth = Math.max(1, width); pixelHeight = Math.max(1, height);
+      // Bound fill cost even on a large retina screen. Shadows are refreshed only when
+      // the lamp or artwork changes, never just because the camera moves.
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2,
+        Math.sqrt(2200000 / (pixelWidth * pixelHeight))));
+      renderer.setSize(pixelWidth, pixelHeight, false);
+      museum.resize(pixelWidth,pixelHeight,renderer.getPixelRatio());
+      room.resize(pixelWidth, pixelHeight); fitDetail(); draw();
     },
     dispose() {
       dead = true; cancelAnimationFrame(frame);
       Object.entries(events).forEach(([name, fn]) => canvas.removeEventListener(name, fn));
+      document.removeEventListener('visibilitychange', draw);
+      reduced.removeEventListener('change', draw);
+      museum.dispose(); room.dispose(); roomMaterial.dispose();
       disposeTextures(); geometry.dispose(); material.dispose(); renderer.dispose();
       renderer.forceContextLoss();
     },

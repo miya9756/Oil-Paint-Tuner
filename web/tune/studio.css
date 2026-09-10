@@ -80,6 +80,57 @@ body.studio-open .toolbar .tgrp[aria-label="Export"]{display:none}
   .studio-buttons{width:100%;justify-content:flex-end}
 }
 @media(max-height:640px){.stage.studio{position:relative}}
+/* The 3D room owns the frame, shadows, and camera. The canvas fills its viewport. */
+.studio-view{padding:0;border-radius:3px}
+.studio-view #studioCanvas{max-width:none;max-height:none;border-radius:0;box-shadow:none;outline-offset:-3px;cursor:crosshair}
+.studio-view.is-room #studioCanvas{cursor:grab}
+.studio-view.is-room #studioCanvas.dragging{cursor:grabbing}
+.studio-view .studio-caption{z-index:2;top:21px;left:22px;right:auto;color:#e9dec6;text-shadow:none;
+  background:#272923b8;padding:5px 8px;border-radius:3px;backdrop-filter:blur(10px)}
+.studio-view .studio-caption span:first-child{display:inline;letter-spacing:.13em;opacity:1}
+.studio-open #lyrPanel,.studio-open .workspace-options{display:none}
+.studio-view:not(.is-room) .studio-caption,.studio-view.after-hours .studio-caption{color:#e9dec6;text-shadow:none}
+.studio-view-switch{display:flex;position:absolute;z-index:2;right:16px;top:14px;border:1px solid #f4ecda38;
+  border-radius:5px;padding:3px;gap:2px;background:#272923b8;backdrop-filter:blur(10px)}
+.studio-view-switch button{min-height:30px;font-size:11px;border:0;background:transparent;color:#d9d1c0;padding:5px 11px}
+.studio-view-switch button[aria-pressed="true"]{background:#ede4d1;color:#4b3923}
+.studio-view-switch #studioExpand{display:grid;place-items:center;padding:5px 8px;border-left:1px solid #f4ecda25;border-radius:2px}
+#studioExpand svg{width:16px;height:16px;display:block}
+#studioView:fullscreen{width:100vw;height:100vh;border-radius:0;background:#202a27}
+.studio-view-tools{position:absolute;z-index:2;bottom:45px;left:50%;transform:translateX(-50%);display:flex;gap:3px;
+  padding:4px;background:#272923b8;backdrop-filter:blur(10px);border:1px solid #f4ecda38;border-radius:5px;white-space:nowrap}
+.studio-view-tools button{border:0;background:transparent;color:#f0e4cb;min-height:30px;min-width:32px;padding:4px 9px;font-size:12px}
+.studio-view-tools button:hover{background:#ffffff1c}
+.studio-view-tools #studioResetView{border-left:1px solid #eee4cb33;border-radius:0;margin-left:3px;padding-left:12px;font-size:10px}
+.studio-view .studio-gesture{bottom:16px;z-index:2;font-size:10px;letter-spacing:.02em;max-width:calc(100% - 24px);
+  color:#eae2d0;background:#252822c9;padding:5px 11px;border-radius:3px}
+.studio-room-options{border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:20px}
+.studio-option{margin-bottom:17px}
+.studio-option>.eyebrow{display:block;margin-bottom:9px}
+.studio-option>div{display:flex;gap:5px}
+.studio-option button{display:flex;gap:6px;align-items:center;justify-content:center;flex:1;padding:7px 5px;min-height:36px;
+  background:transparent;font-size:11px;border-color:var(--line)}
+.studio-option button[aria-pressed="true"]{background:#e9dfcd;border-color:#b69b78;color:#6b482a}
+.frame-sample{display:block;width:13px;height:16px;border:3px solid #a97d44;box-shadow:inset 0 0 0 1px #fff3;background:#ddd1bb}
+.frame-sample.walnut{border-color:#60412c}.frame-sample.black{border-color:#303531}
+.studio-room-note{color:var(--dim);font-size:10px;line-height:1.7;margin:8px 0 0}
+.studio-motion{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;cursor:pointer;min-height:32px}
+.studio-motion input{appearance:none;position:relative;width:32px;height:18px;border:1px solid #b2a58f;border-radius:20px;
+  background:#d6cebf;cursor:pointer;flex:none;margin:0}
+.studio-motion input::before{content:"";position:absolute;left:2px;top:2px;width:12px;height:12px;border-radius:50%;background:#fff9ec}
+.studio-motion input:checked{background:#796548;border-color:#796548}
+.studio-motion input:checked::before{left:16px}
+.studio-motion input:focus-visible{outline:2px solid #966b3e;outline-offset:3px}
+.studio-motion input:disabled{cursor:default;opacity:.5}
+.studio-motion-note{font-size:10px;line-height:1.6;color:var(--dim);margin:2px 0 12px}
+.studio-light-label{display:block;margin-bottom:10px}
+@media(max-width:600px){
+  .studio-view .studio-caption{font-size:8px;left:14px;top:25px}
+  .studio-view-switch{right:10px;top:12px}.studio-view-switch button{min-height:34px;padding:5px 9px;font-size:10px}
+  .studio-view .studio-gesture{font-size:9px;bottom:12px;max-width:94%;padding:5px 8px}
+  .studio-view-tools{bottom:44px}.studio-view-tools button{min-height:34px}
+}
+body:not(.shell) .stage.studio{height:clamp(330px,55svh,530px);min-height:0}
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }

@@ -144,7 +144,7 @@ def main():
         check(r.returncode == 0, "inline script parses", r.stderr.strip()[:200])
         # The compute lives out here now, so checking only the inline script would leave
         # the part that actually paints unverified.
-        mods = ["engine.worker.js", "studio.js"] + [
+        mods = ["engine.worker.js", "studio.js", "studio-room.js", "studio-clockwork.js", "studio-furniture.js", "studio-renderer.js", "studio-textures.js"] + [
             os.path.join("oilpaint", f) for f in sorted(os.listdir(os.path.join(HERE, "oilpaint")))
             if f.endswith(".js")]
         for name in mods:
