@@ -1,11 +1,18 @@
-The Light room credits scene design and implementation to OpenAI Codex, and selected
-3D models as courtesy of Mingyang Song. These credits are available from the expandable
+The Light room credits scene design and implementation to OpenAI Codex, and the
+3D furniture and chandelier to Mingyang Song under CC0. These credits are available from the expandable
 label in the room, including fullscreen, alongside the Three.js and Poly Haven credits.
+
+Mingyang Song dedicates the supplied 3D furniture and chandelier, including the repaired
+models shipped as [`tea-furniture.glb`](tea-furniture.glb) and
+[`chandelier.glb`](chandelier.glb), to the public domain under
+[CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/).
+See [the model dedication](LICENSE.md). Attribution is appreciated but not required.
 
 The tea furniture and chandelier are repaired copies of OBJ files supplied by the
 project owner from their local `old_3d_assets` collection. The source files identify
 Cinema 4D as the exporter; they contain no creator or license metadata, and their
-referenced MTL files were not supplied. No third-party authorship or license is inferred.
+referenced MTL files were not supplied. The CC0 dedication above was provided by the
+project owner separately from the source-file metadata.
 
 `scripts/prepare_studio_assets.py` ear-clips the concave polygons, fills only triangle
 and quad boundary gaps, checks winding, reconstructs normals with hard-edge splits,

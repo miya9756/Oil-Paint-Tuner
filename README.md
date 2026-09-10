@@ -438,4 +438,9 @@ beside the code that implements it.
 
 ---
 
-© 2026 Mingyang Song. All rights reserved.
+© 2026 Mingyang Song. All rights reserved, except where noted.
+
+The 3D furniture and chandelier contributed by Mingyang Song for the Light room are
+dedicated to the public domain under [CC0 1.0 Universal](web/tune/studio-assets/LICENSE.md).
+See the [studio asset credits](web/tune/studio-assets/README.md) for model details and
+third-party material sources.

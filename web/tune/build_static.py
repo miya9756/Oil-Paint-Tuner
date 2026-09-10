@@ -40,6 +40,7 @@ from oilpaint.schema import as_dict  # noqa: E402
 # One page: the tuner carries the living painting inline (the animator and live pages were
 # folded into it -- see CLAUDE.md), so the whole tool is index.html plus its worker.
 ASSETS = ["index.html", "engine.worker.js", "session.js", "studio.js", "studio-room.js", "studio-clockwork.js", "studio-furniture.js", "studio-renderer.js", "studio-textures.js", "studio-assets/materials.json", "studio.css", "atelier.css",
+          "studio-assets/README.md", "studio-assets/LICENSE.md",
           "vendor/three.module.min.js", "vendor/three.core.min.js", "vendor/THREE-LICENSE.txt"]
 ASSETS += sorted(os.path.relpath(os.path.join(dp,f),HERE).replace(os.sep,"/")
                  for dp,_,files in os.walk(os.path.join(HERE,"vendor","addons"))
