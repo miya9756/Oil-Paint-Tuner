@@ -14,8 +14,10 @@ await new Promise((resolve, reject) => {
 });
 let sequence = 0;
 const pending = new Map();
+const pausedRequests = [];
 socket.addEventListener('message', e => {
   const reply = JSON.parse(e.data), job = pending.get(reply.id);
+  if (reply.method === 'Fetch.requestPaused') pausedRequests.push(reply.params.requestId);
   if (!job) return;
   pending.delete(reply.id); clearTimeout(job.timer);
   if (reply.error) job.reject(new Error(JSON.stringify(reply.error)));
@@ -136,8 +138,34 @@ try {
   ok(await evaluate(`!document.querySelector('#rgnBar').hidden && document.querySelector('#rgnEditing').textContent===window.layerScope`), 'gallery preserves the active layer and painting tool');
   await click('toolNone');
   await evaluate(`window.beforeStudio=document.querySelector('#out').src`);
+  // Hold a real room asset: cancellation must stay usable during a cold opening,
+  // and an older asset load must never reveal or close a newer Studio session.
+  await page('Network.enable');
+  await page('Network.setCacheDisabled', { cacheDisabled:true });
+  await page('Fetch.enable', { patterns:[{urlPattern:'*tea-furniture.glb',requestStage:'Request'}] });
   await click('studioBtn');
+  await wait(`!document.querySelector('#studioLoadingView').hidden`);
+  const loadingDeadline = Date.now() + 30000;
+  while (!pausedRequests.length && Date.now() < loadingDeadline) await new Promise(r=>setTimeout(r,100));
+  ok(pausedRequests.length>0, 'the loading check holds a real room asset');
+  ok(await evaluate(`document.querySelector('#studioView').hidden && document.querySelector('#studioView').getAttribute('aria-busy')==='true'
+    && document.querySelector('#studioLoadingPainting').src===window.beforeStudio
+    && document.querySelector('#studioLoadingPainting').naturalWidth>0 && document.activeElement.id==='studioLoadingCancel'
+    && document.querySelector('#studioLoadingStatus').textContent==='Arranging the gallery…' && !document.querySelector('#dl').disabled`),
+    'loading keeps the painting, real phase feedback, keyboard cancellation, and PNG export available');
+  await click('studioLoadingCancel');
+  ok(await evaluate(`document.querySelector('#studioView').hidden && document.querySelector('#studioLoadingView').hidden
+    && document.activeElement.id==='studioBtn' && !document.body.classList.contains('studio-opening')
+    && document.querySelector('#out').src===window.beforeStudio && !document.querySelector('#dl').disabled`), 'cancelling a pending room immediately restores the painter');
+  await click('studioBtn');
+  await wait(`!document.querySelector('#studioLoadingView').hidden`);
+  for (const requestId of pausedRequests.splice(0)) await page('Fetch.continueRequest', { requestId });
+  await page('Fetch.disable');
   await wait(`!document.querySelector('#studioView').hidden`);
+  await wait(`document.querySelector('#studioLoadingView').hidden`);
+  ok(await evaluate(`!document.querySelector('#studioView').hasAttribute('aria-busy') && document.activeElement.id==='studioCanvas'
+    && !document.body.classList.contains('studio-opening') && document.querySelector('#studioCanvas').width>100
+    && document.querySelector('#err').textContent==='' && document.querySelector('#studioNote').hidden`), 'a fresh opening finishes its reveal despite the older cancelled load');
   ok(await evaluate(`document.querySelector('#dl').disabled && document.querySelector('#galleryBtn').disabled && document.querySelector('#studioBtn').getAttribute('aria-pressed')==='true'`), 'preview has explicit mode and export guard');
   ok(await evaluate(`document.querySelector('#studioCanvas').dataset.presentation==='room' && !document.querySelector('#studioRoomOptions').hidden`), 'Studio opens as a 3D room');
   await click('studioMotion');
@@ -172,8 +200,24 @@ try {
   await evaluate(`document.querySelector('#studioCanvas').focus()`);
   await page('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight' });
   ok(await evaluate(`Number(document.querySelector('#studioAz').value)===140`), 'keyboard moves the light');
+  const parallelCompilation = await evaluate(`!!document.querySelector('#studioCanvas').getContext('webgl2').getExtension('KHR_parallel_shader_compile')`);
   await click('studioClose');
   ok(await evaluate(`document.querySelector('#out').src===window.beforeStudio && !document.querySelector('#dl').disabled`), 'Cancel preserves the painting');
+  if (parallelCompilation) for (const action of ['cancel', 'context loss']) {
+    await evaluate(`window.waitingForStudioShader=false;window.nativeProgramParameter=WebGL2RenderingContext.prototype.getProgramParameter;
+      WebGL2RenderingContext.prototype.getProgramParameter=function(program,name){
+        if(name===0x91B1){window.waitingForStudioShader=true;return false;}
+        return window.nativeProgramParameter.call(this,program,name);
+      };`);
+    await click('studioBtn');
+    await wait(`window.waitingForStudioShader && document.querySelector('#studioView').hidden`);
+    if (action === 'cancel') await click('studioLoadingCancel');
+    else await evaluate(`document.querySelector('#studioCanvas').getContext('webgl2').getExtension('WEBGL_lose_context').loseContext()`);
+    await wait(`document.querySelector('#studioLoadingView').hidden`);
+    await evaluate(`WebGL2RenderingContext.prototype.getProgramParameter=window.nativeProgramParameter;new Promise(r=>setTimeout(r,100))`);
+    ok(await evaluate(`document.querySelector('#studioView').hidden && !document.querySelector('#dl').disabled
+      && document.activeElement.id==='studioBtn' && document.querySelector('#err').textContent===''`), `${action} during shader warm-up safely releases the room and keyboard focus`);
+  }
   await click('studioBtn');
   await wait(`!document.querySelector('#studioView').hidden`);
   ok(await evaluate(`!document.querySelector('#studioMotion').checked`), 'motion preference survives reopening Studio');
@@ -327,6 +371,16 @@ try {
   ok(await evaluate(`!document.querySelector('#studioView').hidden && document.querySelector('#studioAz').value==='180'`), 'rotation preserves uncommitted lighting');
   await click('studioClose');
   await page('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+  await click('studioBtn');
+  await wait(`!document.querySelector('#studioView').hidden`);
+  ok(await evaluate(`document.querySelector('#studioLoadingView').hidden
+    && getComputedStyle(document.querySelector('#studioLoadingView')).transitionDuration==='0s'
+    && getComputedStyle(document.querySelector('.studio-loading-line'),'::after').animationName==='none'`), 'reduced motion skips the loading animation and room fade');
+  await click('studioClose');
+  await click('studioBtn');
+  await page('Input.dispatchKeyEvent', {type:'keyDown',key:'Escape',code:'Escape'});
+  ok(await evaluate(`document.querySelector('#studioView').hidden && document.querySelector('#studioLoadingView').hidden
+    && document.activeElement.id==='studioBtn' && !document.querySelector('#dl').disabled`), 'Escape cancels preparation before the scene opens');
   ok(await evaluate(`(async()=>{const {createBrushReveal}=await import('./studio.js');const c=document.createElement('canvas');const reveal=createBrushReveal(c);await reveal.play(document.querySelector('#out').src,document.querySelector('#out').src);return c.hidden})()`), 'reduced motion skips brush reveal');
   await page('Emulation.setEmulatedMedia', { features: [] });
   ok(await evaluate(`(async()=>{const {createBrushReveal}=await import('./studio.js');const c=document.createElement('canvas');const reveal=createBrushReveal(c);await reveal.play(document.querySelector('#out').src,document.querySelector('#out').src);const started=!c.hidden;reveal.cancel();return started&&c.hidden})()`), 'brush reveal starts and can be cancelled');
@@ -369,7 +423,8 @@ try {
   await page('Network.setBlockedURLs', { urls:['*tea-furniture.glb'] });
   await click('studioBtn');
   await wait(`document.querySelector('#studioNote').textContent.includes('could not open')`);
-  ok(await evaluate(`document.querySelector('#studioView').hidden&&!document.querySelector('#dl').disabled`), 'missing room asset keeps the painter usable');
+  ok(await evaluate(`document.querySelector('#studioView').hidden&&document.querySelector('#studioLoadingView').hidden
+    && !document.body.classList.contains('studio-opening')&&!document.querySelector('#dl').disabled`), 'missing room asset clears loading and keeps the painter usable');
   await page('Network.setBlockedURLs', { urls:[] });
   await click('studioBtn');
   await wait(`!document.querySelector('#studioView').hidden`);

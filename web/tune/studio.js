@@ -6,9 +6,11 @@ const direction = (az, el) => {
   return [Math.cos(e) * Math.cos(a), -Math.cos(e) * Math.sin(a), Math.sin(e)];
 };
 
-export async function createStudio(canvas, onMove, onLost) {
+export async function createStudio(canvas, onMove, onLost, { onProgress = async () => {} } = {}) {
+  await onProgress('Arranging the gallery…');
   const [THREE, { createRoom }, { createMuseumRenderer }] = await Promise.all([
     import('./vendor/three.module.min.js'), import('./studio-room.js'), import('./studio-renderer.js')]);
+  await onProgress('Arranging the gallery…');
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = true;
@@ -56,7 +58,13 @@ export async function createStudio(canvas, onMove, onLost) {
        #include <colorspace_fragment>`) });
   const room = createRoom(THREE, roomMaterial);
   let museum = null;
-  try { await room.ready; museum = createMuseumRenderer(THREE,renderer,room); }
+  try {
+    await room.ready;
+    // Let the loading view paint between asset construction and lighting setup.
+    // The caller can also abandon a cancelled opening here, before GPU warm-up.
+    await onProgress('Warming the lights…');
+    museum = createMuseumRenderer(THREE,renderer,room);
+  }
   catch (error) {
     museum?.dispose();
     room.dispose(); roomMaterial.dispose(); geometry.dispose(); material.dispose();
@@ -97,6 +105,25 @@ export async function createStudio(canvas, onMove, onLost) {
   function fitDetail() {
     const ratio = pixelWidth / pixelHeight;
     uniforms.detailScale.value.set(Math.min(1, imageAspect / ratio), Math.min(1, ratio / imageAspect));
+  }
+  function surface(data, cfg) {
+    disposeTextures();
+    const color = new THREE.DataTexture(new Uint8Array(data.color), data.w, data.h);
+    const surface = new THREE.DataTexture(new Float32Array(data.surface), data.w, data.h,
+      THREE.RGBAFormat, THREE.FloatType);
+    color.minFilter = color.magFilter = THREE.LinearFilter;
+    if (renderer.extensions.has('OES_texture_float_linear')) {
+      surface.minFilter = surface.magFilter = THREE.LinearFilter;
+    }
+    for (const tex of [color, surface]) { tex.needsUpdate = true; textures.push(tex); }
+    uniforms.colorMap.value = color; uniforms.surfaceMap.value = surface;
+    uniforms.ambient.value = data.ambient;
+    uniforms.gloss.value = cfg.gloss;
+    uniforms.viewDir.value.set(...direction(cfg.view_deg, cfg.view_elev_deg));
+    imageAspect = data.w / data.h; fitDetail(); room.setArtwork(imageAspect);
+    room.enter(reduced.matches);
+    light(cfg.light_deg, cfg.light_elev_deg);
+    renderer.debug.onShaderError = () => { throw new Error('Lighting shader unavailable'); };
   }
   function fromPointer(e) {
     const rect = canvas.getBoundingClientRect();
@@ -172,26 +199,29 @@ export async function createStudio(canvas, onMove, onLost) {
     inspect() { return { mode, ...room.inspect(), ...museum.inspect(), motion: motion && !reduced.matches, frames: renderer.info.render.frame,
       geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures }; },
     setSurface(data, cfg) {
-      disposeTextures();
-      const color = new THREE.DataTexture(new Uint8Array(data.color), data.w, data.h);
-      const surface = new THREE.DataTexture(new Float32Array(data.surface), data.w, data.h,
-        THREE.RGBAFormat, THREE.FloatType);
-      color.minFilter = color.magFilter = THREE.LinearFilter;
-      if (renderer.extensions.has('OES_texture_float_linear')) {
-        surface.minFilter = surface.magFilter = THREE.LinearFilter;
-      }
-      for (const tex of [color, surface]) { tex.needsUpdate = true; textures.push(tex); }
-      uniforms.colorMap.value = color; uniforms.surfaceMap.value = surface;
-      uniforms.ambient.value = data.ambient;
-      uniforms.gloss.value = cfg.gloss;
-      uniforms.viewDir.value.set(...direction(cfg.view_deg, cfg.view_elev_deg));
-      imageAspect = data.w / data.h; fitDetail(); room.setArtwork(imageAspect);
-      room.enter(reduced.matches);
+      surface(data, cfg);
       ready = true;
-      light(cfg.light_deg, cfg.light_elev_deg);
       // Compile now so a GPU/compiler failure returns to the normal image immediately.
-      renderer.debug.onShaderError = () => { throw new Error('Lighting shader unavailable'); };
-      render();
+      render(); draw();
+    },
+    async prepareSurface(data, cfg) {
+      surface(data, cfg);
+      renderer.toneMapping = mode === 'room' ? THREE.AgXToneMapping : THREE.NoToneMapping;
+      renderer.toneMappingExposure = 1.15;
+      // Poll compilation ourselves so Cancel can dispose immediately. Three r180's
+      // compileAsync keeps polling disposed material properties after cancellation.
+      const materials = renderer.compile(mode === 'room' ? room.scene : scene, mode === 'room' ? room.camera : camera);
+      const gl = renderer.getContext(), parallel = renderer.extensions.get('KHR_parallel_shader_compile');
+      if (parallel) {
+        const programs = [...materials].map(m => renderer.properties.get(m).currentProgram.program);
+        while (!dead && !gl.isContextLost() && programs.some(p => !gl.getProgramParameter(p, parallel.COMPLETION_STATUS_KHR))) {
+          await new Promise(resolve => setTimeout(resolve, 16));
+        }
+      }
+      if (dead) return;
+      if (gl.isContextLost()) throw new Error('Lighting context unavailable');
+      // Warm postprocessing and reflections as well, before the first visible frame.
+      render(); ready = true; draw();
     },
     resize(width, height) {
       pixelWidth = Math.max(1, width); pixelHeight = Math.max(1, height);
@@ -204,6 +234,7 @@ export async function createStudio(canvas, onMove, onLost) {
       room.resize(pixelWidth, pixelHeight); fitDetail(); draw();
     },
     dispose() {
+      if (dead) return;
       dead = true; cancelAnimationFrame(frame);
       Object.entries(events).forEach(([name, fn]) => canvas.removeEventListener(name, fn));
       document.removeEventListener('visibilitychange', draw);

@@ -127,8 +127,8 @@ button:disabled{cursor:default}
 .light-invitation button{display:flex;justify-content:space-between;align-items:center;width:100%;font-size:12px;
   color:#6e4a2c;background:#f9f3e7;border-color:#ccb797;min-height:36px}
 .studio-open .light-invitation,.studio-open #lightCards,.studio-open .render-controls{display:none}
-.studio-open .canvas-caption #canvasHint{font-size:0}
-.studio-open .canvas-caption #canvasHint::after{content:"A space for your painting";font-size:11px}
+.studio-open .canvas-caption #canvasHint,.studio-opening .canvas-caption #canvasHint{font-size:0}
+.studio-open .canvas-caption #canvasHint::after,.studio-opening .canvas-caption #canvasHint::after{content:"A space for your painting";font-size:11px}
 .studio-bar{border:0;border-radius:0;background:transparent;padding:0;margin:0}
 .studio-topline{display:block}
 .studio-topline h2{display:none}

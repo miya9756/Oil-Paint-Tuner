@@ -653,8 +653,29 @@ body.shell .rail{scrollbar-color:#bdc5b8 transparent}
   <main class="pane">
     <div class="canvas-caption"><span class="eyebrow">Your canvas</span><span id="canvasHint">Drag the divider to compare</span></div>
   <div class="stage">
+    <div id="studioLoadingView" class="studio-loading" role="region" hidden aria-label="Opening Studio light">
+      <div class="studio-loading-art" aria-hidden="true"><img id="studioLoadingPainting" alt=""></div>
+      <div class="studio-loading-copy">
+        <p class="studio-loading-title">Opening the salon</p>
+        <p id="studioLoadingStatus" role="status" aria-live="polite" aria-atomic="true"></p>
+        <div class="studio-loading-line" aria-hidden="true"></div>
+        <button id="studioLoadingCancel">Cancel</button>
+      </div>
+    </div>
     <div id="studioView" class="studio-view" hidden>
-      <div class="studio-caption"><span>The clockwork salon</span></div>
+      <details id="studioCredits" class="studio-credits">
+        <summary><span>The clockwork salon</span><small>Credits <span aria-hidden="true">+</span></small></summary>
+        <div class="studio-credits-content">
+          <dl>
+            <div><dt>Scene design &amp; implementation</dt><dd>OpenAI Codex</dd></div>
+            <div><dt>Selected 3D models</dt><dd>Courtesy of Mingyang Song</dd></div>
+          </dl>
+          <p>Built with <a href="./vendor/THREE-LICENSE.txt" target="_blank" rel="noopener">Three.js (MIT)</a>.<br>
+            Materials from <a href="https://polyhaven.com" target="_blank" rel="noopener">Poly Haven</a>
+            (<a href="https://polyhaven.com/license" target="_blank" rel="noopener">CC0</a>).</p>
+          <p class="studio-credits-note">Third-party code and assets remain under their own licences.</p>
+        </div>
+      </details>
       <div class="studio-view-switch" role="group" aria-label="Studio view and fullscreen">
         <button id="studioRoom" aria-pressed="true">Room</button><button id="studioDetail" aria-pressed="false">Close-up</button>
         <button id="studioExpand" aria-label="Expand studio to fullscreen" title="Expand studio to fullscreen" aria-pressed="false"><svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M7 3H3v4m10-4h4v4M3 13v4h4m10-4v4h-4"/></svg></button>
@@ -903,6 +924,7 @@ let SCHEMA = [], DEFAULTS = {}, params = {}, haveImage = false, lastPng = null;
 let freshVisit = false;
 let studioActive = false, studioLoading = false, studioGeneration = 0, studioGPU = null;
 let studioLast = null, studioDraft = null;
+let studioRevealTimer = 0, studioSize = '';
 let studioPresentation = 'room', studioFrame = 'walnut', studioAmbience = 'linen';
 let studioMotion = true;
 const studioMotionMedia = window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -4752,10 +4774,22 @@ function studioMessage(text){
   $('#studioNote').textContent = text;
   $('#studioNote').hidden = !text;
 }
+function clearStudioLoading(){
+  clearTimeout(studioRevealTimer);
+  const loading = $('#studioLoadingView');
+  loading.hidden = true; loading.inert = false;
+  loading.classList.remove('is-leaving'); loading.removeAttribute('aria-hidden');
+  $('#studioLoadingPainting').removeAttribute('src');
+  $('#studioView').removeAttribute('aria-busy');
+  $('.stage').classList.remove('studio-preparing');
+  document.body.classList.remove('studio-opening');
+}
 function closeStudio(){
   if(!studioActive && !studioLoading) return;
+  const restoreFocus = $('#studioLoadingView').contains(document.activeElement) || $('#studioView').contains(document.activeElement);
   if(document.fullscreenElement === $('#studioView')) document.exitFullscreen?.().catch(()=>{});
   studioGeneration++; studioActive = false; studioLoading = false;
+  clearStudioLoading(); studioSize = '';
   if(studioGPU){ studioGPU.dispose(); studioGPU = null; }
   $('#studioView').hidden = true; $('#studioBar').hidden = true;
   $('.stage').classList.remove('studio');
@@ -4768,11 +4802,16 @@ function closeStudio(){
   $('#galleryBtn').disabled = !lastPng;
   studioMessage('');
   toolState(); sizeWipe();
+  if(restoreFocus) $('#studioBtn').focus({ preventScroll: true });
 }
 function studioResize(){
   if(!studioGPU || !studioLast) return;
-  const view = $('#studioView');
+  // Warm the scene at its real display size while the loading painting covers it.
+  const view = $('#studioView').hidden ? $('.stage') : $('#studioView');
   const w = Math.max(1, view.clientWidth), h = Math.max(1, view.clientHeight);
+  const size = `${w}x${h}@${window.devicePixelRatio || 1}`;
+  if(size === studioSize) return; // Revealing the view must not clear its first frame.
+  studioSize = size;
   const canvas = $('#studioCanvas');
   canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
   studioGPU.resize(w, h);
@@ -4840,10 +4879,26 @@ async function openStudio(){
   brushReveal.cancel();
   studioLoading = true;
   $('#galleryBtn').disabled = true;
+  $('#inspectorStudio').disabled = true;
   const mine = ++studioGeneration, last = studioLast;
-  studioMessage('Preparing the paint surface...');
+  studioMessage('');
+  $('#studioLoadingPainting').src = $('#out').src;
+  $('#studioLoadingView').hidden = false;
+  $('#studioView').setAttribute('aria-busy', 'true');
+  $('.stage').classList.add('studio-preparing'); document.body.classList.add('studio-opening');
+  $('#studioBtn').classList.add('on'); $('#studioBtn').setAttribute('aria-pressed', 'true');
+  $('#toolNone').classList.remove('on'); $('#toolNone').setAttribute('aria-pressed', 'false');
+  $('#studioLoadingCancel').focus({ preventScroll: true });
+  const progress = async text => {
+    if(mine !== studioGeneration) throw new DOMException('Studio opening cancelled', 'AbortError');
+    $('#studioLoadingStatus').textContent = text;
+    // A resolved promise alone does not let the browser paint before scene building.
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    if(mine !== studioGeneration) throw new DOMException('Studio opening cancelled', 'AbortError');
+  };
   let gpu = null;
   try{
+    await progress('Preparing your painting…');
     const answer = await ask({ type: 'surface', renderId: last.id });
     if(mine !== studioGeneration) return;
     if(!answer.data) throw new Error('Render the painting again, then reopen Studio light.');
@@ -4852,20 +4907,31 @@ async function openStudio(){
     const oldCanvas = $('#studioCanvas'), canvas = oldCanvas.cloneNode(false);
     oldCanvas.replaceWith(canvas);
     gpu = await createStudio(canvas, studioLight, () => {
+      if(mine !== studioGeneration) return;
       closeStudio(); studioMessage('Studio light is unavailable. Your painting is still ready to edit and save.');
-    });
+    }, { onProgress: progress });
     if(mine !== studioGeneration){ gpu.dispose(); return; }
     studioGPU = gpu;
     studioView(studioPresentation); studioFinish(studioFrame); studioRoomMood(studioAmbience); syncStudioMotion();
-    gpu.setSurface(answer.data, last.params);
+    await progress('Warming the lights…');
+    studioResize();
+    await gpu.prepareSurface(answer.data, last.params);
+    if(mine !== studioGeneration){ gpu.dispose(); return; }
     studioActive = true; studioLoading = false;
     $('#studioView').hidden = false; $('#studioBar').hidden = false;
     $('.stage').classList.add('studio'); document.body.classList.add('studio-open');
     $('#studioBtn').classList.add('on'); $('#studioBtn').setAttribute('aria-pressed', 'true');
     $('#toolNone').classList.remove('on'); $('#toolNone').setAttribute('aria-pressed', 'false');
     $('#dl').disabled = true;
+    $('#inspectorStudio').disabled = false;
     studioLight(last.params.light_deg, last.params.light_elev_deg);
     studioMessage(''); studioResize();
+    $('#studioView').removeAttribute('aria-busy');
+    $('.stage').classList.remove('studio-preparing'); document.body.classList.remove('studio-opening');
+    const loading = $('#studioLoadingView');
+    loading.inert = true; loading.setAttribute('aria-hidden', 'true'); loading.classList.add('is-leaving');
+    if(studioMotionMedia?.matches) clearStudioLoading();
+    else studioRevealTimer = setTimeout(() => { if(mine === studioGeneration) clearStudioLoading(); }, 650);
     $('#studioCanvas').focus({ preventScroll: true });
   }catch(e){
     if(mine !== studioGeneration){ if(gpu) gpu.dispose(); return; }
@@ -4875,6 +4941,7 @@ async function openStudio(){
 }
 $('#studioBtn').addEventListener('click', openStudio);
 $('#inspectorStudio').addEventListener('click', openStudio);
+$('#studioLoadingCancel').addEventListener('click', () => { closeStudio(); $('#studioBtn').focus({ preventScroll: true }); });
 $('#studioRoom').addEventListener('click', () => studioView('room'));
 $('#studioDetail').addEventListener('click', () => studioView('detail'));
 $('#studioExpand').disabled = !$('#studioView').requestFullscreen;

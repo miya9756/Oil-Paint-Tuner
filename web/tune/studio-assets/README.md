@@ -1,3 +1,7 @@
+The Light room credits scene design and implementation to OpenAI Codex, and selected
+3D models as courtesy of Mingyang Song. These credits are available from the expandable
+label in the room, including fullscreen, alongside the Three.js and Poly Haven credits.
+
 The tea furniture and chandelier are repaired copies of OBJ files supplied by the
 project owner from their local `old_3d_assets` collection. The source files identify
 Cinema 4D as the exporter; they contain no creator or license metadata, and their
